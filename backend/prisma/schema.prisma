@@ -24,72 +24,95 @@ enum PaymentType {
 }
 
 model User {
-  id           String           @id @default(uuid())
-  email        String           @unique
-  name         String?
-  phone        String?
+  id             String    @id @default(uuid())
+  email          String    @unique
+  name           String?
+  phone          String?
   hashedPassword String?
-  isActive     Boolean          @default(true)
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
-  deletedAt    DateTime?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
 
   // Profiles
   barberProfile   BarberProfile?
   customerProfile CustomerProfile?
 
   // Relations
-  permissions   UserPermission[]
-  appointmentsAsCustomer Appointment[] @relation("customerAppointments")
-  appointmentsAsBarber  Appointment[]  @relation("barberAppointments")
-  financialRecords FinancialRecord[]
-  notificationLogs NotificationLog[]
-  auditLogs AuditLog[] @relation("auditActor")
+  permissions            UserPermission[]
+  ownedBarbershops       Barbershop[]      @relation("BarbershopOwner")
+  appointmentsAsCustomer Appointment[]     @relation("customerAppointments")
+  appointmentsAsBarber   Appointment[]     @relation("barberAppointments")
+  financialRecords       FinancialRecord[]
+  notificationLogs       NotificationLog[]
+  auditLogs              AuditLog[]        @relation("auditActor")
 
   @@map("users")
 }
 
-model Permission {
-  id          Int              @id @default(autoincrement())
-  name        String           @unique
-  description String?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+model Barbershop {
+  id        String    @id @default(uuid())
+  name      String
+  ownerId   String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
-  users       UserPermission[]
+  owner        User              @relation("BarbershopOwner", fields: [ownerId], references: [id])
+  barbers      BarberProfile[]
+  customers    CustomerProfile[]
+  services     Service[]
+  appointments Appointment[]
+
+  @@index([ownerId])
+  @@map("barbershops")
+}
+
+model Permission {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users UserPermission[]
 
   @@map("permissions")
 }
 
 model UserPermission {
-  id           Int      @id @default(autoincrement())
-  user         User     @relation(fields: [userId], references: [id])
+  id           Int        @id @default(autoincrement())
+  user         User       @relation(fields: [userId], references: [id])
   userId       String
   permission   Permission @relation(fields: [permissionId], references: [id])
   permissionId Int
-  grantedAt    DateTime  @default(now())
+  grantedAt    DateTime   @default(now())
 
   @@unique([userId, permissionId])
   @@map("user_permissions")
 }
 
 model Service {
-  id          String    @id @default(uuid())
-  name        String
-  description String?
-  durationMin Int       @default(30) // duration in minutes
-  price       Decimal   @db.Decimal(10, 2)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime?
+  id           String    @id @default(uuid())
+  barbershopId String
+  name         String
+  description  String?
+  durationMin  Int       @default(30)
+  price        Decimal   @db.Decimal(10, 2)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
 
+  barbershop   Barbershop    @relation(fields: [barbershopId], references: [id])
   appointments Appointment[]
 
+  @@index([barbershopId])
   @@map("services")
 }
 
 model Appointment {
   id           String            @id @default(uuid())
+  barbershopId String
   customer     User              @relation("customerAppointments", fields: [customerId], references: [id])
   customerId   String
   barber       User              @relation("barberAppointments", fields: [barberId], references: [id])
@@ -105,75 +128,85 @@ model Appointment {
   updatedAt    DateTime          @updatedAt
   deletedAt    DateTime?
 
-  notifications NotificationLog[]
+  barbershop      Barbershop        @relation(fields: [barbershopId], references: [id])
+  notifications   NotificationLog[]
   financialRecord FinancialRecord?
 
   @@index([barberId, startAt])
   @@index([customerId, startAt])
+  @@index([barbershopId, startAt])
   @@map("appointments")
 }
 
 model CustomerProfile {
-  id         String  @id @default(uuid())
-  user       User    @relation(fields: [userId], references: [id])
-  userId     String  @unique
-  birthdate  DateTime?
-  metadata   Json?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id           String    @id @default(uuid())
+  user         User      @relation(fields: [userId], references: [id])
+  userId       String    @unique
+  barbershopId String
+  birthdate    DateTime?
+  metadata     Json?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id])
+
+  @@index([barbershopId])
   @@map("customer_profiles")
 }
 
 model BarberProfile {
-  id            String  @id @default(uuid())
-  user          User    @relation(fields: [userId], references: [id])
-  userId        String  @unique
+  id            String   @id @default(uuid())
+  user          User     @relation(fields: [userId], references: [id])
+  userId        String   @unique
+  barbershopId  String
   bio           String?
   specialties   String?
-  commissionPct Float?  @default(0) // stored as percentage
+  commissionPct Float?   @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id])
+
+  @@index([barbershopId])
   @@map("barber_profiles")
 }
 
 model FinancialRecord {
-  id             String       @id @default(uuid())
-  appointment    Appointment? @relation(fields: [appointmentId], references: [id])
-  appointmentId  String?      @unique
-  type           PaymentType
-  amount         Decimal      @db.Decimal(10, 2)
-  description    String?
-  recordedBy     User?        @relation(fields: [recordedById], references: [id])
-  recordedById   String?
-  recordedAt     DateTime     @default(now())
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  id            String       @id @default(uuid())
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
+  appointmentId String?      @unique
+  type          PaymentType
+  amount        Decimal      @db.Decimal(10, 2)
+  description   String?
+  recordedBy    User?        @relation(fields: [recordedById], references: [id])
+  recordedById  String?
+  recordedAt    DateTime     @default(now())
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 
   @@map("financial_records")
 }
 
 model NotificationLog {
-  id           String    @id @default(uuid())
-  appointment  Appointment? @relation(fields: [appointmentId], references: [id])
+  id            String       @id @default(uuid())
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
   appointmentId String?
-  user         User?     @relation(fields: [userId], references: [id])
-  userId       String?
-  channel      String    // e.g., "WHATSAPP"
-  event        String    // e.g., "APPOINTMENT_CONFIRMED"
-  payload      Json?
-  status       String    // e.g., "SENT", "FAILED", "PENDING"
-  sentAt       DateTime?
-  createdAt    DateTime  @default(now())
+  user          User?        @relation(fields: [userId], references: [id])
+  userId        String?
+  channel       String
+  event         String
+  payload       Json?
+  status        String
+  sentAt        DateTime?
+  createdAt     DateTime     @default(now())
 
   @@index([appointmentId])
   @@map("notification_logs")
 }
 
 model AuditLog {
-  id        String  @id @default(uuid())
-  actor     User?   @relation("auditActor", fields: [actorId], references: [id])
+  id        String   @id @default(uuid())
+  actor     User?    @relation("auditActor", fields: [actorId], references: [id])
   actorId   String?
   action    String
   entity    String
@@ -189,4 +222,3 @@ model AuditLog {
 /// - Soft deletes use `deletedAt` DateTime? fields when defined.
 /// - Use Decimal type for monetary values. Ensure the client uses Decimal handling.
 /// - The schema maps table names explicitly for clarity.
-
