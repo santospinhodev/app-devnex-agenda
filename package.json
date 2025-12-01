@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "npm run start --workspace=backend",
-    "dev": "npm run dev --workspace=backend"
+    "dev": "npm run start:dev --workspace=backend"
   },
   "workspaces": [
     "backend",
