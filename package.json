@@ -1,0 +1,16 @@
+{
+  "name": "devnex-agenda-monorepo",
+  "version": "1.0.0",
+  "description": "Devnex Agenda MVP Monorepo",
+  "main": "index.js",
+  "scripts": {
+    "start": "npm run start --workspace=backend",
+    "dev": "npm run dev --workspace=backend"
+  },
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "author": "",
+  "license": "ISC"
+}
