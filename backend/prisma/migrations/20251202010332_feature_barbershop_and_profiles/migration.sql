@@ -23,8 +23,20 @@ DROP COLUMN "specialties",
 ADD COLUMN     "avatarUrl" TEXT,
 ADD COLUMN     "commissionPercentage" DOUBLE PRECISION,
 ADD COLUMN     "isActive" BOOLEAN NOT NULL DEFAULT true,
-ADD COLUMN     "name" TEXT NOT NULL,
+ADD COLUMN     "name" TEXT,
 ADD COLUMN     "phone" TEXT;
+
+UPDATE "barber_profiles" AS bp
+SET "name" = COALESCE(u."name", 'Barbeiro')
+FROM "users" AS u
+WHERE bp."userId" = u."id" AND bp."name" IS NULL;
+
+UPDATE "barber_profiles"
+SET "name" = 'Barbeiro'
+WHERE "name" IS NULL;
+
+ALTER TABLE "barber_profiles"
+ALTER COLUMN "name" SET NOT NULL;
 
 -- AlterTable
 ALTER TABLE "barbershops" ADD COLUMN     "address" TEXT,
@@ -43,8 +55,18 @@ ALTER TABLE "customer_profiles" DROP COLUMN "birthdate",
 DROP COLUMN "metadata",
 DROP COLUMN "userId",
 ADD COLUMN     "avatarUrl" TEXT,
-ADD COLUMN     "name" TEXT NOT NULL,
-ADD COLUMN     "phone" TEXT NOT NULL;
+ADD COLUMN     "name" TEXT,
+ADD COLUMN     "phone" TEXT;
+
+UPDATE "customer_profiles"
+SET "name" = COALESCE("name", 'Cliente'),
+    "phone" = COALESCE("phone", '0000000000');
+
+ALTER TABLE "customer_profiles"
+ALTER COLUMN "name" SET NOT NULL;
+
+ALTER TABLE "customer_profiles"
+ALTER COLUMN "phone" SET NOT NULL;
 
 -- CreateTable
 CREATE TABLE "receptionist_profiles" (
