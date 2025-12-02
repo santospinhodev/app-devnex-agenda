@@ -5,12 +5,14 @@ import { Permission } from "../../../common/enums/permission.enum";
 import { AuthUser } from "../interfaces/auth-user.interface";
 import { UserWithRelations } from "../types/user-with-relations.type";
 
-export interface CreateAdminUserInput {
+export interface CreateUserInput {
   email: string;
   name?: string;
   phone?: string;
   hashedPassword: string;
 }
+
+export interface CreateAdminUserInput extends CreateUserInput {}
 
 @Injectable()
 export class UsersService {
@@ -34,6 +36,13 @@ export class UsersService {
     data: CreateAdminUserInput,
     tx?: Prisma.TransactionClient
   ): Promise<UserWithRelations> {
+    return this.createUser(data, tx);
+  }
+
+  createUser(
+    data: CreateUserInput,
+    tx?: Prisma.TransactionClient
+  ): Promise<UserWithRelations> {
     return this.usersRepository.createUser(
       {
         email: data.email,
@@ -49,9 +58,19 @@ export class UsersService {
     userId: string,
     tx?: Prisma.TransactionClient
   ): Promise<void> {
-    const permissionsToAssign = [Permission.ADMIN, Permission.BARBER];
+    await this.assignPermissions(
+      userId,
+      [Permission.ADMIN, Permission.BARBER],
+      tx
+    );
+  }
 
-    for (const permission of permissionsToAssign) {
+  async assignPermissions(
+    userId: string,
+    permissions: Permission[],
+    tx?: Prisma.TransactionClient
+  ): Promise<void> {
+    for (const permission of permissions) {
       const prismaPermission = await this.usersRepository.upsertPermission(
         permission,
         tx
@@ -64,6 +83,14 @@ export class UsersService {
     }
   }
 
+  updateUser(
+    id: string,
+    data: Prisma.UserUpdateInput,
+    tx?: Prisma.TransactionClient
+  ): Promise<UserWithRelations> {
+    return this.usersRepository.updateUser(id, data, tx);
+  }
+
   mapToAuthUser(user: UserWithRelations): AuthUser {
     const permissions = Array.from(
       new Set(
@@ -71,21 +98,24 @@ export class UsersService {
       )
     );
 
+    const barbershopReference =
+      user.barberProfile?.barbershop ??
+      user.receptionistProfile?.barbershop ??
+      user.ownedBarbershops?.[0] ??
+      null;
+
     return {
       id: user.id,
       email: user.email,
       name: user.name,
       phone: user.phone,
       permissions,
-      barbershop:
-        (user.barberProfile?.barbershop ?? user.customerProfile?.barbershop)
-          ? {
-              id: (user.barberProfile?.barbershop ??
-                user.customerProfile?.barbershop)!.id,
-              name: (user.barberProfile?.barbershop ??
-                user.customerProfile?.barbershop)!.name,
-            }
-          : null,
+      barbershop: barbershopReference
+        ? {
+            id: barbershopReference.id,
+            name: barbershopReference.name,
+          }
+        : null,
     };
   }
 }

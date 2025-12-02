@@ -12,9 +12,15 @@ export const userWithRelations = Prisma.validator<Prisma.UserDefaultArgs>()({
         barbershop: true,
       },
     },
-    customerProfile: {
+    receptionistProfile: {
       include: {
         barbershop: true,
+      },
+    },
+    ownedBarbershops: {
+      select: {
+        id: true,
+        name: true,
       },
     },
   },

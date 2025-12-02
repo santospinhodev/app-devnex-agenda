@@ -56,6 +56,19 @@ export class UsersRepository {
     });
   }
 
+  updateUser(
+    id: string,
+    data: Prisma.UserUpdateInput,
+    tx?: Prisma.TransactionClient
+  ): Promise<UserWithRelations> {
+    const client = this.getClient(tx);
+    return client.user.update({
+      where: { id },
+      data,
+      include: this.includeRelations(),
+    }) as unknown as Promise<UserWithRelations>;
+  }
+
   attachPermissionToUser(
     userId: string,
     permissionId: number,
