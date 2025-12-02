@@ -35,8 +35,8 @@ model User {
   deletedAt      DateTime?
 
   // Profiles
-  barberProfile   BarberProfile?
-  customerProfile CustomerProfile?
+  barberProfile       BarberProfile?
+  receptionistProfile ReceptionistProfile?
 
   // Relations
   permissions            UserPermission[]
@@ -51,18 +51,29 @@ model User {
 }
 
 model Barbershop {
-  id        String    @id @default(uuid())
-  name      String
-  ownerId   String
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  id           String    @id @default(uuid())
+  ownerId      String
+  name         String
+  phone        String?
+  address      String?
+  neighborhood String?
+  city         String?
+  state        String?
+  zipCode      String?
+  photoUrl     String?
+  opensAt      String?
+  closesAt     String?
+  daysOpen     String[]  @default([])
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
 
-  owner        User              @relation("BarbershopOwner", fields: [ownerId], references: [id])
-  barbers      BarberProfile[]
-  customers    CustomerProfile[]
-  services     Service[]
-  appointments Appointment[]
+  owner         User                  @relation("BarbershopOwner", fields: [ownerId], references: [id])
+  barbers       BarberProfile[]
+  receptionists ReceptionistProfile[]
+  customers     CustomerProfile[]
+  services      Service[]
+  appointments  Appointment[]
 
   @@index([ownerId])
   @@map("barbershops")
@@ -139,14 +150,13 @@ model Appointment {
 }
 
 model CustomerProfile {
-  id           String    @id @default(uuid())
-  user         User      @relation(fields: [userId], references: [id])
-  userId       String    @unique
+  id           String   @id @default(uuid())
   barbershopId String
-  birthdate    DateTime?
-  metadata     Json?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  name         String
+  phone        String
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   barbershop Barbershop @relation(fields: [barbershopId], references: [id])
 
@@ -155,20 +165,41 @@ model CustomerProfile {
 }
 
 model BarberProfile {
-  id            String   @id @default(uuid())
-  user          User     @relation(fields: [userId], references: [id])
-  userId        String   @unique
-  barbershopId  String
-  bio           String?
-  specialties   String?
-  commissionPct Float?   @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                   String   @id @default(uuid())
+  user                 User     @relation(fields: [userId], references: [id])
+  userId               String   @unique
+  barbershopId         String
+  name                 String
+  phone                String?
+  avatarUrl            String?
+  commissionPercentage Float?
+  bio                  String?
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   barbershop Barbershop @relation(fields: [barbershopId], references: [id])
 
   @@index([barbershopId])
   @@map("barber_profiles")
+}
+
+model ReceptionistProfile {
+  id           String   @id @default(uuid())
+  user         User     @relation(fields: [userId], references: [id])
+  userId       String   @unique
+  barbershopId String
+  name         String
+  phone        String?
+  avatarUrl    String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id])
+
+  @@index([barbershopId])
+  @@map("receptionist_profiles")
 }
 
 model FinancialRecord {
