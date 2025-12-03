@@ -10,7 +10,8 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "qa:phase4": "ts-node -r tsconfig-paths/register scripts/qa/phase4-agenda.test.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.3.0",
