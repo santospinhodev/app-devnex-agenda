@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
-import { AppointmentStatus } from "@prisma/client";
+import { AppointmentStatus, BlockType } from "@prisma/client";
 import { PrismaService } from "../../../database/prisma.service";
 import { BarberAvailabilityRecord } from "../barber-availability/repositories/barber-availability.repository";
 import {
@@ -7,9 +7,11 @@ import {
   BarberAvailabilityService,
   RequestActor,
 } from "../barber-availability/services/barber-availability.service";
+import { BarberBlockRecord } from "../barber-block/repositories/barber-block.repository";
+import { BarberBlockService } from "../barber-block/services/barber-block.service";
 import {
-  DayEntry,
   DayViewResponse,
+  SlotEntry,
   SlotsResponse,
   WeekDayView,
   WeekViewResponse,
@@ -30,11 +32,24 @@ interface AppointmentWindow extends AppointmentRecord {
   endMinutes: number;
 }
 
+interface BlockWindow {
+  id?: string;
+  type: BlockType;
+  note?: string | null;
+  startMinutes: number;
+  endMinutes: number;
+  source: "BARBER_BLOCK" | "LUNCH";
+}
+
 @Injectable()
 export class AgendaService {
+  private static readonly MINUTES_PER_DAY = 24 * 60;
+  private static readonly DEFAULT_TIMELINE_INTERVAL = 30;
+
   constructor(
     private readonly prisma: PrismaService,
-    private readonly barberAvailabilityService: BarberAvailabilityService
+    private readonly barberAvailabilityService: BarberAvailabilityService,
+    private readonly barberBlockService: BarberBlockService
   ) {}
 
   async getAvailableSlots(
@@ -68,7 +83,22 @@ export class AgendaService {
       endOfDay
     );
     const mappedAppointments = this.mapAppointments(appointments, startOfDay);
-    const slots = this.calculateFreeSlots(availability, mappedAppointments);
+    const blockRecords = await this.barberBlockService.findBlocksForRange(
+      profile.id,
+      startOfDay,
+      endOfDay
+    );
+    const blockWindows = this.mapBlocksToWindows(blockRecords, startOfDay);
+    const lunchWindow = this.createLunchBlockWindow(availability);
+    if (lunchWindow) {
+      blockWindows.push(lunchWindow);
+    }
+
+    const slots = this.calculateFreeSlots(
+      availability,
+      mappedAppointments,
+      blockWindows
+    );
 
     return {
       barberId,
@@ -97,16 +127,18 @@ export class AgendaService {
         dayOfWeek
       );
     const { startOfDay, endOfDay } = this.getDayRange(referenceDate);
-    const appointments = await this.fetchAppointments(
-      profile,
+    const blockRecords = await this.barberBlockService.findBlocksForRange(
+      profile.id,
       startOfDay,
       endOfDay
     );
-    const entries = this.buildDayEntries(
-      availability,
-      appointments,
-      startOfDay
-    );
+    const blockWindows = this.mapBlocksToWindows(blockRecords, startOfDay);
+    const lunchWindow = this.createLunchBlockWindow(availability);
+    if (lunchWindow) {
+      blockWindows.push(lunchWindow);
+    }
+
+    const entries = this.buildDayEntries(availability, blockWindows);
 
     return {
       barberId,
@@ -132,23 +164,27 @@ export class AgendaService {
     const overallStart = weekDays[0].startOfDay;
     const overallEnd = this.addDays(overallStart, 7);
 
-    const appointments = await this.fetchAppointments(
-      profile,
+    const availabilityMap =
+      await this.barberAvailabilityService.getAvailabilityMap(profile.id);
+    const weeklyBlocks = await this.barberBlockService.findBlocksForRange(
+      profile.id,
       overallStart,
       overallEnd
     );
-    const groupedAppointments = this.groupAppointmentsByDay(appointments);
-    const availabilityMap =
-      await this.barberAvailabilityService.getAvailabilityMap(profile.id);
 
     const days: WeekDayView[] = weekDays.map((day) => {
-      const dayAppointments = groupedAppointments.get(day.dateKey) ?? [];
+      const dayEnd = this.addDays(day.startOfDay, 1);
       const availability = availabilityMap.get(day.dayOfWeek) ?? null;
-      const entries = this.buildDayEntries(
-        availability,
-        dayAppointments,
-        day.startOfDay
+      const dayBlocks = weeklyBlocks.filter(
+        (block) => block.startTime < dayEnd && block.endTime > day.startOfDay
       );
+      const blockWindows = this.mapBlocksToWindows(dayBlocks, day.startOfDay);
+      const lunchWindow = this.createLunchBlockWindow(availability);
+      if (lunchWindow) {
+        blockWindows.push(lunchWindow);
+      }
+
+      const entries = this.buildDayEntries(availability, blockWindows);
 
       return {
         date: day.dateKey,
@@ -204,60 +240,74 @@ export class AgendaService {
 
   private buildDayEntries(
     availability: BarberAvailabilityRecord | null,
-    appointments: AppointmentRecord[],
-    dayStart: Date
-  ): DayEntry[] {
-    const mappedAppointments = this.mapAppointments(appointments, dayStart);
-    const entries: DayEntry[] = [];
+    blockWindows: BlockWindow[]
+  ): SlotEntry[] {
+    const interval =
+      availability?.slotInterval ?? AgendaService.DEFAULT_TIMELINE_INTERVAL;
+    const entries: SlotEntry[] = [];
+    const availabilityStart = availability
+      ? timeStringToMinutes(availability.startTime)
+      : null;
+    const availabilityEnd = availability
+      ? timeStringToMinutes(availability.endTime)
+      : null;
 
-    if (availability) {
-      const freeSlots = this.calculateFreeSlots(
-        availability,
-        mappedAppointments
+    if (interval <= 0) {
+      return entries;
+    }
+
+    for (
+      let current = 0;
+      current < AgendaService.MINUTES_PER_DAY;
+      current += interval
+    ) {
+      const slotEnd = Math.min(
+        AgendaService.MINUTES_PER_DAY,
+        current + interval
       );
-      for (const slot of freeSlots) {
-        entries.push({ type: "FREE_SLOT", time: slot });
+      const inAvailability =
+        availabilityStart !== null &&
+        availabilityEnd !== null &&
+        current >= availabilityStart &&
+        slotEnd <= availabilityEnd;
+
+      if (!inAvailability) {
+        entries.push({ time: minutesToTime(current), status: "UNAVAILABLE" });
+        continue;
       }
 
-      if (availability.lunchStart && availability.lunchEnd) {
+      const overlappingBlock = this.findBlockOverlap(
+        blockWindows,
+        current,
+        slotEnd
+      );
+      if (overlappingBlock) {
         entries.push({
-          type: "BLOCK",
-          time: availability.lunchStart,
-          endTime: availability.lunchEnd,
-          reason: "LUNCH",
+          time: minutesToTime(current),
+          status: "BLOCKED",
+          block: {
+            id: overlappingBlock.id,
+            type: overlappingBlock.type,
+            note: overlappingBlock.note ?? null,
+            source: overlappingBlock.source,
+          },
         });
+      } else {
+        entries.push({ time: minutesToTime(current), status: "FREE" });
       }
     }
 
-    for (const appointment of mappedAppointments) {
-      entries.push({
-        type: "APPOINTMENT",
-        time: minutesToTime(appointment.startMinutes),
-        endTime: minutesToTime(appointment.endMinutes),
-        appointmentId: appointment.id,
-        status: appointment.status,
-        serviceId: appointment.serviceId,
-        customerId: appointment.customerId,
-      });
-    }
-
-    entries.sort((a, b) => this.entryMinutes(a) - this.entryMinutes(b));
     return entries;
   }
 
   private calculateFreeSlots(
     availability: BarberAvailabilityRecord,
-    appointments: AppointmentWindow[]
+    appointments: AppointmentWindow[],
+    blockWindows: BlockWindow[]
   ): string[] {
     const startMinutes = timeStringToMinutes(availability.startTime);
     const endMinutes = timeStringToMinutes(availability.endTime);
     const interval = availability.slotInterval;
-    const lunchStart = availability.lunchStart
-      ? timeStringToMinutes(availability.lunchStart)
-      : null;
-    const lunchEnd = availability.lunchEnd
-      ? timeStringToMinutes(availability.lunchEnd)
-      : null;
 
     const freeSlots: string[] = [];
 
@@ -267,13 +317,10 @@ export class AgendaService {
       current += interval
     ) {
       const slotEnd = current + interval;
-      const overlapsLunch =
-        lunchStart !== null &&
-        lunchEnd !== null &&
-        current < lunchEnd &&
-        slotEnd > lunchStart;
 
-      if (overlapsLunch) {
+      const overlapsBlock =
+        this.findBlockOverlap(blockWindows, current, slotEnd) !== null;
+      if (overlapsBlock) {
         continue;
       }
 
@@ -308,26 +355,73 @@ export class AgendaService {
     });
   }
 
-  private groupAppointmentsByDay(appointments: AppointmentRecord[]) {
-    const map = new Map<string, AppointmentRecord[]>();
+  private mapBlocksToWindows(
+    blocks: BarberBlockRecord[],
+    dayStart: Date
+  ): BlockWindow[] {
+    const windows: BlockWindow[] = [];
 
-    for (const appointment of appointments) {
-      const key = this.formatDate(appointment.startAt);
-      if (!map.has(key)) {
-        map.set(key, []);
+    for (const block of blocks) {
+      const startMinutes = this.clampMinutes(
+        this.diffInMinutes(block.startTime, dayStart),
+        0,
+        AgendaService.MINUTES_PER_DAY
+      );
+      const endMinutes = this.clampMinutes(
+        this.diffInMinutes(block.endTime, dayStart),
+        0,
+        AgendaService.MINUTES_PER_DAY
+      );
+
+      if (endMinutes <= startMinutes) {
+        continue;
       }
-      map.get(key)!.push(appointment);
+
+      windows.push({
+        id: block.id,
+        type: block.type,
+        note: block.note ?? null,
+        startMinutes,
+        endMinutes,
+        source: "BARBER_BLOCK",
+      });
     }
 
-    return map;
+    return windows;
   }
 
-  private entryMinutes(entry: DayEntry): number {
-    if (entry.type === "APPOINTMENT") {
-      return timeStringToMinutes(entry.time);
+  private createLunchBlockWindow(
+    availability: BarberAvailabilityRecord | null
+  ): BlockWindow | null {
+    if (!availability || !availability.lunchStart || !availability.lunchEnd) {
+      return null;
     }
 
-    return timeStringToMinutes(entry.time);
+    const startMinutes = timeStringToMinutes(availability.lunchStart);
+    const endMinutes = timeStringToMinutes(availability.lunchEnd);
+
+    if (endMinutes <= startMinutes) {
+      return null;
+    }
+
+    return {
+      type: BlockType.BREAK,
+      startMinutes,
+      endMinutes,
+      source: "LUNCH",
+    };
+  }
+
+  private findBlockOverlap(
+    blocks: BlockWindow[],
+    start: number,
+    end: number
+  ): BlockWindow | null {
+    return (
+      blocks.find(
+        (block) => start < block.endMinutes && end > block.startMinutes
+      ) ?? null
+    );
   }
 
   private parseDate(dateStr: string): Date {
@@ -385,6 +479,10 @@ export class AgendaService {
 
   private diffInMinutes(target: Date, base: Date): number {
     return Math.floor((target.getTime() - base.getTime()) / 60000);
+  }
+
+  private clampMinutes(value: number, min: number, max: number) {
+    return Math.max(min, Math.min(max, value));
   }
 
   private formatDate(date: Date): string {

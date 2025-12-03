@@ -1,4 +1,4 @@
-import { AppointmentStatus } from "@prisma/client";
+import { BlockType } from "@prisma/client";
 
 export interface AvailableSlot {
   time: string;
@@ -10,39 +10,28 @@ export interface SlotsResponse {
   slots: AvailableSlot[];
 }
 
-export type DayEntry = FreeSlotEntry | AppointmentEntry | BlockEntry;
+export type SlotStatus = "FREE" | "BLOCKED" | "UNAVAILABLE";
 
-export interface FreeSlotEntry {
-  type: "FREE_SLOT";
+export interface SlotEntry {
   time: string;
-}
-
-export interface AppointmentEntry {
-  type: "APPOINTMENT";
-  time: string;
-  endTime: string;
-  appointmentId: string;
-  status: AppointmentStatus;
-  serviceId: string;
-  customerId: string;
-}
-
-export interface BlockEntry {
-  type: "BLOCK";
-  time: string;
-  endTime: string;
-  reason: "LUNCH";
+  status: SlotStatus;
+  block?: {
+    id?: string;
+    type: BlockType;
+    note?: string | null;
+    source: "BARBER_BLOCK" | "LUNCH";
+  };
 }
 
 export interface DayViewResponse {
   barberId: string;
   date: string;
-  entries: DayEntry[];
+  entries: SlotEntry[];
 }
 
 export interface WeekDayView {
   date: string;
-  entries: DayEntry[];
+  entries: SlotEntry[];
 }
 
 export interface WeekViewResponse {

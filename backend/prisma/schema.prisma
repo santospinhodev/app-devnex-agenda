@@ -23,6 +23,14 @@ enum PaymentType {
   OTHER
 }
 
+enum BlockType {
+  MANUAL
+  BREAK
+  VACATION
+  SICK_LEAVE
+  OTHER
+}
+
 model User {
   id             String    @id @default(uuid())
   email          String    @unique
@@ -74,6 +82,7 @@ model Barbershop {
   customers     CustomerProfile[]
   services      Service[]
   appointments  Appointment[]
+  blocks        BarberBlock[]
 
   @@index([ownerId])
   @@map("barbershops")
@@ -180,9 +189,29 @@ model BarberProfile {
 
   barbershop Barbershop @relation(fields: [barbershopId], references: [id])
   availabilities BarberAvailability[]
+  blocks        BarberBlock[]
 
   @@index([barbershopId])
   @@map("barber_profiles")
+}
+
+model BarberBlock {
+  id             String    @id @default(uuid())
+  barberProfileId String
+  barbershopId   String
+  startTime      DateTime
+  endTime        DateTime
+  type           BlockType
+  note           String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  barber     BarberProfile @relation(fields: [barberProfileId], references: [id])
+  barbershop Barbershop    @relation(fields: [barbershopId], references: [id])
+
+  @@index([barberProfileId, startTime])
+  @@index([barbershopId, startTime])
+  @@map("barber_blocks")
 }
 
 model BarberAvailability {
