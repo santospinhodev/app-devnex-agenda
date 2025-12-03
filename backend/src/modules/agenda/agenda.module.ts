@@ -6,10 +6,16 @@ import { BarberAvailabilityModule } from "./barber-availability/barber-availabil
 import { BarberBlockModule } from "./barber-block/barber-block.module";
 import { AgendaController } from "./controllers/agenda.controller";
 import { AgendaService } from "./services/agenda.service";
+import { AgendaTimelineBuilderService } from "./services/agenda-timeline-builder.service";
 
 @Module({
   imports: [PrismaModule, BarberAvailabilityModule, BarberBlockModule],
   controllers: [AgendaController],
-  providers: [AgendaService, JwtAccessGuard, PermissionsGuard],
+  providers: [
+    AgendaService,
+    AgendaTimelineBuilderService,
+    JwtAccessGuard,
+    PermissionsGuard,
+  ],
 })
 export class AgendaModule {}

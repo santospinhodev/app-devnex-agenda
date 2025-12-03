@@ -23,6 +23,18 @@ export interface SlotEntry {
   };
 }
 
+export interface FinalTimelineEntry {
+  time: string;
+  status: SlotStatus;
+  type?: BlockType;
+  source?: "BARBER_BLOCK" | "LUNCH";
+}
+
+export interface FinalWeekDay {
+  date: string;
+  slots: FinalTimelineEntry[];
+}
+
 export interface DayViewResponse {
   barberId: string;
   date: string;
