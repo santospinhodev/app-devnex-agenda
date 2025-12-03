@@ -6,6 +6,7 @@ import { AuthModule } from "./modules/auth/auth.module";
 import { UsersModule } from "./modules/users/users.module";
 import { BarbershopModule } from "./modules/barbershop/barbershop.module";
 import { UserProfilesModule } from "./modules/user-profiles/user-profiles.module";
+import { AgendaModule } from "./modules/agenda/agenda.module";
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { UserProfilesModule } from "./modules/user-profiles/user-profiles.module
     AuthModule,
     BarbershopModule,
     UserProfilesModule,
+    AgendaModule,
   ],
 })
 export class AppModule {}
