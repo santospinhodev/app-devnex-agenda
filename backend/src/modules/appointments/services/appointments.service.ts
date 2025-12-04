@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { AppointmentStatus, Prisma } from "@prisma/client";
@@ -15,6 +16,7 @@ import {
 import { timeStringToMinutes } from "../../agenda/utils/time.utils";
 import { UsersRepository } from "../../users/repositories/users.repository";
 import { UserWithRelations } from "../../users/types/user-with-relations.type";
+import { NotificationsService } from "../../notifications/notifications.service";
 import {
   CreateAppointmentCustomerDto,
   CreateAppointmentDto,
@@ -37,11 +39,14 @@ interface NormalizedCustomerPayload {
 
 @Injectable()
 export class AppointmentsService {
+  private readonly logger = new Logger(AppointmentsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly appointmentsRepository: AppointmentsRepository,
     private readonly barberAvailabilityService: BarberAvailabilityService,
     private readonly usersRepository: UsersRepository,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async createAppointment(
@@ -70,6 +75,12 @@ export class AppointmentsService {
         durationMin: true,
         price: true,
         deletedAt: true,
+        barbershop: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
     });
 
@@ -101,6 +112,7 @@ export class AppointmentsService {
     );
 
     const notes = dto.notes?.trim() ?? null;
+    const barbershopName = service.barbershop?.name ?? "Sua barbearia";
 
     const appointment = await this.prisma.$transaction(async (tx) => {
       await this.ensureNoBlockConflicts(
@@ -146,6 +158,7 @@ export class AppointmentsService {
       return this.mapAppointment(record);
     });
 
+    await this.notifyAppointmentConfirmation(appointment, barbershopName);
     return this.serializeAppointment(appointment);
   }
 
@@ -421,6 +434,66 @@ export class AppointmentsService {
     if (conflict) {
       throw new BadRequestException("Selected time overlaps a blocked period");
     }
+  }
+
+  private async notifyAppointmentConfirmation(
+    appointment: AppointmentWithMeta,
+    barbershopName: string,
+  ) {
+    const recipient = this.normalizeWhatsAppRecipient(
+      appointment.customer.phone,
+    );
+
+    if (!recipient) {
+      this.logger.debug(
+        `Skipping WhatsApp confirmation for appointment ${appointment.id}: invalid phone`,
+      );
+      return;
+    }
+
+    const { date, time } = this.formatAppointmentSchedule(appointment.startAt);
+
+    try {
+      await this.notificationsService.sendAppointmentConfirmation({
+        to: recipient,
+        customerName: appointment.customer.name ?? "Cliente",
+        barbershopName,
+        date,
+        time,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : JSON.stringify(error);
+      this.logger.warn(
+        `WhatsApp confirmation failed for appointment ${appointment.id}: ${message}`,
+      );
+    }
+  }
+
+  private normalizeWhatsAppRecipient(phone: string | null) {
+    if (!phone) {
+      return null;
+    }
+
+    const trimmed = phone.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const digits = trimmed.replace(/\D/g, "");
+    if (!digits) {
+      return null;
+    }
+
+    return `+${digits}`;
+  }
+
+  private formatAppointmentSchedule(date: Date) {
+    const iso = date.toISOString();
+    return {
+      date: iso.slice(0, 10),
+      time: iso.slice(11, 16),
+    };
   }
 
   private async resolveCustomer(

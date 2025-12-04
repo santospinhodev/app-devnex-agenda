@@ -8,6 +8,7 @@ import { BarbershopModule } from "./modules/barbershop/barbershop.module";
 import { UserProfilesModule } from "./modules/user-profiles/user-profiles.module";
 import { AgendaModule } from "./modules/agenda/agenda.module";
 import { AppointmentsModule } from "./modules/appointments/appointments.module";
+import { NotificationsModule } from "./modules/notifications/notifications.module";
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { AppointmentsModule } from "./modules/appointments/appointments.module";
     UserProfilesModule,
     AgendaModule,
     AppointmentsModule,
+    NotificationsModule,
   ],
 })
 export class AppModule {}

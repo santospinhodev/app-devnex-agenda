@@ -7,9 +7,15 @@ import { UsersModule } from "../users/users.module";
 import { AppointmentsController } from "./controllers/appointments.controller";
 import { AppointmentsService } from "./services/appointments.service";
 import { AppointmentsRepository } from "./repositories/appointments.repository";
+import { NotificationsModule } from "../notifications/notifications.module";
 
 @Module({
-  imports: [PrismaModule, BarberAvailabilityModule, UsersModule],
+  imports: [
+    PrismaModule,
+    BarberAvailabilityModule,
+    UsersModule,
+    NotificationsModule,
+  ],
   controllers: [AppointmentsController],
   providers: [
     AppointmentsService,
