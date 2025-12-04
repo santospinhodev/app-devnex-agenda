@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import {
   BadRequestException,
   ForbiddenException,
@@ -17,6 +18,7 @@ import { timeStringToMinutes } from "../../agenda/utils/time.utils";
 import { UsersRepository } from "../../users/repositories/users.repository";
 import { UserWithRelations } from "../../users/types/user-with-relations.type";
 import { NotificationsService } from "../../notifications/notifications.service";
+import { NotificationJobMetadata } from "../../notifications/dto/send-whatsapp-template.dto";
 import {
   CreateAppointmentCustomerDto,
   CreateAppointmentDto,
@@ -452,6 +454,10 @@ export class AppointmentsService {
     }
 
     const { date, time } = this.formatAppointmentSchedule(appointment.startAt);
+    const metadata = this.buildNotificationMetadata(
+      appointment.id,
+      "appointment-confirmation",
+    );
 
     try {
       await this.notificationsService.sendAppointmentConfirmation({
@@ -460,6 +466,7 @@ export class AppointmentsService {
         barbershopName,
         date,
         time,
+        metadata,
       });
     } catch (error) {
       const message =
@@ -493,6 +500,17 @@ export class AppointmentsService {
     return {
       date: iso.slice(0, 10),
       time: iso.slice(11, 16),
+    };
+  }
+
+  private buildNotificationMetadata(
+    appointmentId: string,
+    source: string,
+  ): NotificationJobMetadata {
+    return {
+      appointmentId,
+      source,
+      correlationId: `${source}:${appointmentId}:${randomUUID()}`,
     };
   }
 

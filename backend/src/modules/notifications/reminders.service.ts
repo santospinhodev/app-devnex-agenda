@@ -1,9 +1,11 @@
+import { randomUUID } from "crypto";
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Cron } from "@nestjs/schedule";
 import { AppointmentStatus } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import { NotificationsService } from "./notifications.service";
+import { NotificationJobMetadata } from "./dto/send-whatsapp-template.dto";
 
 const REMINDER_CRON_PATTERN =
   process.env.REMINDER_CRON_PATTERN &&
@@ -115,6 +117,7 @@ export class RemindersService {
       }
 
       const schedule = this.formatSchedule(appointment.startAt);
+      const metadata = this.buildReminderMetadata(appointment.id, source);
 
       try {
         const delivered =
@@ -127,6 +130,7 @@ export class RemindersService {
               date: schedule.date,
               time: schedule.time,
             },
+            metadata,
           });
 
         if (!delivered) {
@@ -195,6 +199,17 @@ export class RemindersService {
       appointmentId,
       type: REMINDER_TYPE,
       description: JSON.stringify({ appointmentId, type: REMINDER_TYPE }),
+    };
+  }
+
+  private buildReminderMetadata(
+    appointmentId: string,
+    source: "cron" | "manual",
+  ): NotificationJobMetadata {
+    return {
+      appointmentId,
+      source: `reminder-${source}`,
+      correlationId: `reminder-${source}:${appointmentId}:${randomUUID()}`,
     };
   }
 }
