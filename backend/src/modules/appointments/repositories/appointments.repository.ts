@@ -20,6 +20,17 @@ const appointmentWithRelations =
           price: true,
         },
       },
+      barber: {
+        select: {
+          id: true,
+          barberProfile: {
+            select: {
+              id: true,
+              barbershopId: true,
+            },
+          },
+        },
+      },
     },
   });
 
@@ -40,7 +51,7 @@ export class AppointmentsRepository {
     barbershopId: string,
     start: Date,
     end: Date,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient,
   ): Promise<AppointmentWithRelations[]> {
     const client = this.getClient(tx);
     return client.appointment.findMany({
@@ -62,7 +73,8 @@ export class AppointmentsRepository {
     barberUserId: string,
     start: Date,
     end: Date,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient,
+    excludeAppointmentId?: string,
   ): Promise<boolean> {
     const client = this.getClient(tx);
     return client.appointment
@@ -75,6 +87,9 @@ export class AppointmentsRepository {
           },
           startAt: { lt: end },
           endAt: { gt: start },
+          ...(excludeAppointmentId
+            ? { id: { not: excludeAppointmentId } }
+            : {}),
         },
       })
       .then((count) => count > 0);
@@ -82,10 +97,34 @@ export class AppointmentsRepository {
 
   createAppointment(
     data: Prisma.AppointmentCreateInput,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient,
   ) {
     const client = this.getClient(tx);
     return client.appointment.create({
+      data,
+      include: appointmentWithRelations.include,
+    });
+  }
+
+  findById(id: string, tx?: Prisma.TransactionClient) {
+    const client = this.getClient(tx);
+    return client.appointment.findFirst({
+      where: {
+        id,
+        deletedAt: null,
+      },
+      include: appointmentWithRelations.include,
+    });
+  }
+
+  updateAppointment(
+    id: string,
+    data: Prisma.AppointmentUpdateInput,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = this.getClient(tx);
+    return client.appointment.update({
+      where: { id },
       data,
       include: appointmentWithRelations.include,
     });

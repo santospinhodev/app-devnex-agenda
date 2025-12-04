@@ -19,6 +19,7 @@ import {
   CreateAppointmentCustomerDto,
   CreateAppointmentDto,
 } from "../dto/create-appointment.dto";
+import { RescheduleAppointmentDto } from "../dto/reschedule-appointment.dto";
 import {
   AppointmentsRepository,
   AppointmentWithRelations,
@@ -40,23 +41,23 @@ export class AppointmentsService {
     private readonly prisma: PrismaService,
     private readonly appointmentsRepository: AppointmentsRepository,
     private readonly barberAvailabilityService: BarberAvailabilityService,
-    private readonly usersRepository: UsersRepository
+    private readonly usersRepository: UsersRepository,
   ) {}
 
   async createAppointment(
     actor: RequestActor,
-    dto: CreateAppointmentDto
+    dto: CreateAppointmentDto,
   ): Promise<AppointmentResponse> {
     const { profile } =
       await this.barberAvailabilityService.getAuthorizedBarberProfile(
         actor,
         dto.barberId,
-        "view"
+        "view",
       );
 
     if (!this.canManageAppointments(actor, profile)) {
       throw new ForbiddenException(
-        "You cannot create appointments for this barber"
+        "You cannot create appointments for this barber",
       );
     }
 
@@ -78,7 +79,7 @@ export class AppointmentsService {
 
     if (service.barbershopId !== profile.barbershopId) {
       throw new ForbiddenException(
-        "Service is not available for this barbershop"
+        "Service is not available for this barbershop",
       );
     }
 
@@ -89,14 +90,14 @@ export class AppointmentsService {
     const appointmentWindow = this.resolveAppointmentWindow(
       dto.date,
       dto.time,
-      service.durationMin
+      service.durationMin,
     );
 
     await this.assertWithinAvailability(
       profile.id,
       appointmentWindow.dayOfWeek,
       appointmentWindow.startMinutes,
-      appointmentWindow.endMinutes
+      appointmentWindow.endMinutes,
     );
 
     const notes = dto.notes?.trim() ?? null;
@@ -106,13 +107,13 @@ export class AppointmentsService {
         profile.id,
         appointmentWindow.startAt,
         appointmentWindow.endAt,
-        tx
+        tx,
       );
 
       const customer = await this.resolveCustomer(
         profile.barbershopId,
         dto,
-        tx
+        tx,
       );
 
       const hasConflict =
@@ -120,7 +121,7 @@ export class AppointmentsService {
           profile.userId,
           appointmentWindow.startAt,
           appointmentWindow.endAt,
-          tx
+          tx,
         );
 
       if (hasConflict) {
@@ -139,7 +140,7 @@ export class AppointmentsService {
           price: service.price,
           notes,
         },
-        tx
+        tx,
       );
 
       return this.mapAppointment(record);
@@ -148,24 +149,106 @@ export class AppointmentsService {
     return this.serializeAppointment(appointment);
   }
 
+  async cancelAppointment(
+    actor: RequestActor,
+    appointmentId: string,
+  ): Promise<AppointmentResponse> {
+    this.assertFrontDeskPermissions(actor);
+    const { appointment } = await this.getAuthorizedAppointment(
+      actor,
+      appointmentId,
+    );
+
+    this.assertAppointmentIsActive(appointment, "cancel");
+
+    const updated = await this.appointmentsRepository.updateAppointment(
+      appointment.id,
+      { status: AppointmentStatus.CANCELLED },
+    );
+
+    return this.serializeAppointment(this.mapAppointment(updated));
+  }
+
+  async rescheduleAppointment(
+    actor: RequestActor,
+    appointmentId: string,
+    dto: RescheduleAppointmentDto,
+  ): Promise<AppointmentResponse> {
+    this.assertFrontDeskPermissions(actor);
+    const { appointment, profile } = await this.getAuthorizedAppointment(
+      actor,
+      appointmentId,
+    );
+
+    this.assertAppointmentIsActive(appointment, "reschedule");
+
+    const appointmentWindow = this.resolveAppointmentWindow(
+      dto.date,
+      dto.time,
+      appointment.service.durationMin,
+    );
+
+    await this.assertWithinAvailability(
+      profile.id,
+      appointmentWindow.dayOfWeek,
+      appointmentWindow.startMinutes,
+      appointmentWindow.endMinutes,
+    );
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await this.ensureNoBlockConflicts(
+        profile.id,
+        appointmentWindow.startAt,
+        appointmentWindow.endAt,
+        tx,
+      );
+
+      const hasConflict =
+        await this.appointmentsRepository.hasAppointmentConflict(
+          profile.userId,
+          appointmentWindow.startAt,
+          appointmentWindow.endAt,
+          tx,
+          appointment.id,
+        );
+
+      if (hasConflict) {
+        throw new BadRequestException("Selected time is no longer available");
+      }
+
+      const record = await this.appointmentsRepository.updateAppointment(
+        appointment.id,
+        {
+          startAt: appointmentWindow.startAt,
+          endAt: appointmentWindow.endAt,
+        },
+        tx,
+      );
+
+      return this.mapAppointment(record);
+    });
+
+    return this.serializeAppointment(updated);
+  }
+
   async getBarberAppointmentsInRange(
     profile: AuthorizedBarberProfile,
     start: Date,
-    end: Date
+    end: Date,
   ): Promise<AppointmentWithMeta[]> {
     const records =
       await this.appointmentsRepository.findBarberAppointmentsBetween(
         profile.userId,
         profile.barbershopId,
         start,
-        end
+        end,
       );
     return records.map((record) => this.mapAppointment(record));
   }
 
   private canManageAppointments(
     actor: RequestActor,
-    profile: AuthorizedBarberProfile
+    profile: AuthorizedBarberProfile,
   ) {
     const permissions = new Set(actor.permissions);
     if (permissions.has(Permission.ADMIN)) {
@@ -179,10 +262,74 @@ export class AppointmentsService {
     );
   }
 
+  private assertFrontDeskPermissions(actor: RequestActor) {
+    const permissions = new Set(actor.permissions);
+    if (
+      permissions.has(Permission.ADMIN) ||
+      permissions.has(Permission.RECEPTIONIST)
+    ) {
+      return;
+    }
+
+    throw new ForbiddenException(
+      "Only admins or receptionists can manage appointments",
+    );
+  }
+
+  private async getAuthorizedAppointment(
+    actor: RequestActor,
+    appointmentId: string,
+  ) {
+    const appointment =
+      await this.appointmentsRepository.findById(appointmentId);
+
+    if (!appointment) {
+      throw new NotFoundException("Appointment not found");
+    }
+
+    const barberProfileId = appointment.barber.barberProfile?.id;
+
+    if (!barberProfileId) {
+      throw new BadRequestException("Barber profile not found for appointment");
+    }
+
+    const { profile } =
+      await this.barberAvailabilityService.getAuthorizedBarberProfile(
+        actor,
+        barberProfileId,
+        "view",
+      );
+
+    return { appointment, profile };
+  }
+
+  private assertAppointmentIsActive(
+    appointment: AppointmentWithRelations,
+    action: "cancel" | "reschedule",
+  ) {
+    if (appointment.status === AppointmentStatus.CANCELLED) {
+      throw new BadRequestException(
+        `Cannot ${action} an appointment that is already cancelled`,
+      );
+    }
+
+    if (appointment.status === AppointmentStatus.COMPLETED) {
+      throw new BadRequestException(
+        `Cannot ${action} an appointment that is already completed`,
+      );
+    }
+
+    if (appointment.status === AppointmentStatus.NO_SHOW) {
+      throw new BadRequestException(
+        `Cannot ${action} an appointment marked as no-show`,
+      );
+    }
+  }
+
   private resolveAppointmentWindow(
     dateStr: string,
     timeStr: string,
-    durationMin: number
+    durationMin: number,
   ) {
     const dateMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (!dateMatch) {
@@ -219,12 +366,12 @@ export class AppointmentsService {
     barberProfileId: string,
     dayOfWeek: number,
     startMinutes: number,
-    endMinutes: number
+    endMinutes: number,
   ) {
     const availability =
       await this.barberAvailabilityService.findAvailabilityForDay(
         barberProfileId,
-        dayOfWeek
+        dayOfWeek,
       );
 
     if (!availability) {
@@ -251,7 +398,7 @@ export class AppointmentsService {
     startA: number,
     endA: number,
     startB: number,
-    endB: number
+    endB: number,
   ) {
     return startA < endB && endA > startB;
   }
@@ -260,7 +407,7 @@ export class AppointmentsService {
     barberProfileId: string,
     startAt: Date,
     endAt: Date,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient,
   ) {
     const client = tx ?? this.prisma;
     const conflict = await client.barberBlock.findFirst({
@@ -279,7 +426,7 @@ export class AppointmentsService {
   private async resolveCustomer(
     barbershopId: string,
     dto: CreateAppointmentDto,
-    tx: Prisma.TransactionClient
+    tx: Prisma.TransactionClient,
   ): Promise<UserWithRelations> {
     if (dto.customerId) {
       const customer = await this.usersRepository.findById(dto.customerId, tx);
@@ -296,7 +443,7 @@ export class AppointmentsService {
 
     if (!dto.customer) {
       throw new BadRequestException(
-        "Provide either a customerId or customer details"
+        "Provide either a customerId or customer details",
       );
     }
 
@@ -317,7 +464,7 @@ export class AppointmentsService {
           name: normalized.name,
           phone: normalized.phone,
         },
-        tx
+        tx,
       );
     } else {
       user = await this.createCustomerUser(normalized, barbershopId, tx);
@@ -330,7 +477,7 @@ export class AppointmentsService {
   }
 
   private normalizeCustomerPayload(
-    payload: CreateAppointmentCustomerDto
+    payload: CreateAppointmentCustomerDto,
   ): NormalizedCustomerPayload {
     const name = payload?.name?.trim();
     const phoneDigits = payload?.phone?.replace(/\D/g, "");
@@ -354,7 +501,7 @@ export class AppointmentsService {
   private async createCustomerUser(
     payload: NormalizedCustomerPayload,
     barbershopId: string,
-    tx: Prisma.TransactionClient
+    tx: Prisma.TransactionClient,
   ) {
     const email =
       payload.email ?? this.generateCustomerEmail(payload.phone, barbershopId);
@@ -366,7 +513,7 @@ export class AppointmentsService {
         phone: payload.phone,
         isActive: true,
       },
-      tx
+      tx,
     );
   }
 
@@ -378,10 +525,10 @@ export class AppointmentsService {
 
   private async ensureClientPermission(
     user: UserWithRelations,
-    tx: Prisma.TransactionClient
+    tx: Prisma.TransactionClient,
   ) {
     const alreadyClient = user.permissions.some(
-      (relation) => relation.permission.name === Permission.CLIENT
+      (relation) => relation.permission.name === Permission.CLIENT,
     );
 
     if (alreadyClient) {
@@ -390,13 +537,13 @@ export class AppointmentsService {
 
     const permission = await this.usersRepository.upsertPermission(
       Permission.CLIENT,
-      tx
+      tx,
     );
 
     await this.usersRepository.attachPermissionToUser(
       user.id,
       permission.id,
-      tx
+      tx,
     );
   }
 
@@ -404,7 +551,7 @@ export class AppointmentsService {
     user: UserWithRelations,
     barbershopId: string,
     payload: NormalizedCustomerPayload | undefined,
-    tx: Prisma.TransactionClient
+    tx: Prisma.TransactionClient,
   ) {
     const client = tx ?? this.prisma;
     const profile = await client.customerProfile.findUnique({
@@ -421,7 +568,7 @@ export class AppointmentsService {
 
     if (profile && profile.barbershopId !== barbershopId) {
       throw new ForbiddenException(
-        "Customer already belongs to another barbershop"
+        "Customer already belongs to another barbershop",
       );
     }
 
@@ -447,7 +594,7 @@ export class AppointmentsService {
   }
 
   private mapAppointment(
-    record: AppointmentWithRelations
+    record: AppointmentWithRelations,
   ): AppointmentWithMeta {
     return {
       id: record.id,
@@ -470,7 +617,7 @@ export class AppointmentsService {
   }
 
   private serializeAppointment(
-    appointment: AppointmentWithMeta
+    appointment: AppointmentWithMeta,
   ): AppointmentResponse {
     return {
       id: appointment.id,
