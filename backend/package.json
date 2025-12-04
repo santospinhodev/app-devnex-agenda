@@ -11,7 +11,8 @@
     "start:prod": "node dist/main.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "qa:phase4": "ts-node -r tsconfig-paths/register scripts/qa/phase4-agenda.test.ts"
+    "qa:phase4": "ts-node -r tsconfig-paths/register scripts/qa/phase4-agenda.test.ts",
+    "qa:phase6.1": "ts-node -r tsconfig-paths/register scripts/qa/phase6.1-reminders.test.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.3.0",
@@ -20,6 +21,7 @@
     "@nestjs/jwt": "^10.2.0",
     "@nestjs/passport": "^10.0.3",
     "@nestjs/platform-express": "^10.3.0",
+    "@nestjs/schedule": "^6.0.1",
     "@prisma/client": "^5.10.2",
     "axios": "^1.13.2",
     "bcrypt": "^5.1.1",
