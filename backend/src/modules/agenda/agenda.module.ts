@@ -7,9 +7,15 @@ import { BarberBlockModule } from "./barber-block/barber-block.module";
 import { AgendaController } from "./controllers/agenda.controller";
 import { AgendaService } from "./services/agenda.service";
 import { AgendaTimelineBuilderService } from "./services/agenda-timeline-builder.service";
+import { AppointmentsModule } from "../appointments/appointments.module";
 
 @Module({
-  imports: [PrismaModule, BarberAvailabilityModule, BarberBlockModule],
+  imports: [
+    PrismaModule,
+    BarberAvailabilityModule,
+    BarberBlockModule,
+    AppointmentsModule,
+  ],
   controllers: [AgendaController],
   providers: [
     AgendaService,

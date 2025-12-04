@@ -1,0 +1,22 @@
+import { Module } from "@nestjs/common";
+import { PrismaModule } from "../../database/prisma.module";
+import { JwtAccessGuard } from "../../common/guards/jwt-access.guard";
+import { PermissionsGuard } from "../../common/guards/permissions.guard";
+import { BarberAvailabilityModule } from "../agenda/barber-availability/barber-availability.module";
+import { UsersModule } from "../users/users.module";
+import { AppointmentsController } from "./controllers/appointments.controller";
+import { AppointmentsService } from "./services/appointments.service";
+import { AppointmentsRepository } from "./repositories/appointments.repository";
+
+@Module({
+  imports: [PrismaModule, BarberAvailabilityModule, UsersModule],
+  controllers: [AppointmentsController],
+  providers: [
+    AppointmentsService,
+    AppointmentsRepository,
+    JwtAccessGuard,
+    PermissionsGuard,
+  ],
+  exports: [AppointmentsService],
+})
+export class AppointmentsModule {}

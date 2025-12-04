@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
-import { AppointmentStatus, BlockType } from "@prisma/client";
-import { PrismaService } from "../../../database/prisma.service";
+import { BlockType } from "@prisma/client";
+import { AppointmentWithMeta } from "../../appointments/types/appointment.types";
+import { AppointmentsService } from "../../appointments/services/appointments.service";
 import { BarberAvailabilityRecord } from "../barber-availability/repositories/barber-availability.repository";
 import {
   AuthorizedBarberProfile,
@@ -16,18 +17,11 @@ import {
   WeekDayView,
   WeekViewResponse,
 } from "../types/agenda.types";
+import { buildSlotAppointmentDetails } from "../utils/appointment.utils";
 import { minutesToTime, timeStringToMinutes } from "../utils/time.utils";
 
-interface AppointmentRecord {
-  id: string;
-  startAt: Date;
-  endAt: Date;
-  status: AppointmentStatus;
-  serviceId: string;
-  customerId: string;
-}
-
-interface AppointmentWindow extends AppointmentRecord {
+interface AppointmentWindow {
+  appointment: AppointmentWithMeta;
   startMinutes: number;
   endMinutes: number;
 }
@@ -47,9 +41,9 @@ export class AgendaService {
   private static readonly DEFAULT_TIMELINE_INTERVAL = 30;
 
   constructor(
-    private readonly prisma: PrismaService,
     private readonly barberAvailabilityService: BarberAvailabilityService,
-    private readonly barberBlockService: BarberBlockService
+    private readonly barberBlockService: BarberBlockService,
+    private readonly appointmentsService: AppointmentsService
   ) {}
 
   async getAvailableSlots(
@@ -77,11 +71,12 @@ export class AgendaService {
     }
 
     const { startOfDay, endOfDay } = this.getDayRange(referenceDate);
-    const appointments = await this.fetchAppointments(
-      profile,
-      startOfDay,
-      endOfDay
-    );
+    const appointments =
+      await this.appointmentsService.getBarberAppointmentsInRange(
+        profile,
+        startOfDay,
+        endOfDay
+      );
     const mappedAppointments = this.mapAppointments(appointments, startOfDay);
     const blockRecords = await this.barberBlockService.findBlocksForRange(
       profile.id,
@@ -138,7 +133,19 @@ export class AgendaService {
       blockWindows.push(lunchWindow);
     }
 
-    const entries = this.buildDayEntries(availability, blockWindows);
+    const appointments =
+      await this.appointmentsService.getBarberAppointmentsInRange(
+        profile,
+        startOfDay,
+        endOfDay
+      );
+    const mappedAppointments = this.mapAppointments(appointments, startOfDay);
+
+    const entries = this.buildDayEntries(
+      availability,
+      blockWindows,
+      mappedAppointments
+    );
 
     return {
       barberId,
@@ -171,6 +178,12 @@ export class AgendaService {
       overallStart,
       overallEnd
     );
+    const weeklyAppointments =
+      await this.appointmentsService.getBarberAppointmentsInRange(
+        profile,
+        overallStart,
+        overallEnd
+      );
 
     const days: WeekDayView[] = weekDays.map((day) => {
       const dayEnd = this.addDays(day.startOfDay, 1);
@@ -184,7 +197,20 @@ export class AgendaService {
         blockWindows.push(lunchWindow);
       }
 
-      const entries = this.buildDayEntries(availability, blockWindows);
+      const dayAppointments = weeklyAppointments.filter(
+        (appointment) =>
+          appointment.startAt < dayEnd && appointment.endAt > day.startOfDay
+      );
+      const mappedAppointments = this.mapAppointments(
+        dayAppointments,
+        day.startOfDay
+      );
+
+      const entries = this.buildDayEntries(
+        availability,
+        blockWindows,
+        mappedAppointments
+      );
 
       return {
         date: day.dateKey,
@@ -202,45 +228,10 @@ export class AgendaService {
     };
   }
 
-  private async fetchAppointments(
-    profile: AuthorizedBarberProfile,
-    start: Date,
-    end: Date
-  ): Promise<AppointmentRecord[]> {
-    const records = await this.prisma.appointment.findMany({
-      where: {
-        barberId: profile.userId,
-        barbershopId: profile.barbershopId,
-        startAt: { gte: start, lt: end },
-        deletedAt: null,
-        status: {
-          notIn: [AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW],
-        },
-      },
-      select: {
-        id: true,
-        startAt: true,
-        endAt: true,
-        status: true,
-        serviceId: true,
-        customerId: true,
-      },
-      orderBy: { startAt: "asc" },
-    });
-
-    return records.map((record) => ({
-      id: record.id,
-      startAt: record.startAt,
-      endAt: record.endAt,
-      status: record.status,
-      serviceId: record.serviceId,
-      customerId: record.customerId,
-    }));
-  }
-
   private buildDayEntries(
     availability: BarberAvailabilityRecord | null,
-    blockWindows: BlockWindow[]
+    blockWindows: BlockWindow[],
+    appointments: AppointmentWindow[]
   ): SlotEntry[] {
     const interval =
       availability?.slotInterval ?? AgendaService.DEFAULT_TIMELINE_INTERVAL;
@@ -273,6 +264,22 @@ export class AgendaService {
 
       if (!inAvailability) {
         entries.push({ time: minutesToTime(current), status: "UNAVAILABLE" });
+        continue;
+      }
+
+      const overlappingAppointment = this.findAppointmentOverlap(
+        appointments,
+        current,
+        slotEnd
+      );
+      if (overlappingAppointment) {
+        entries.push({
+          time: minutesToTime(current),
+          status: "APPOINTMENT",
+          appointment: buildSlotAppointmentDetails(
+            overlappingAppointment.appointment
+          ),
+        });
         continue;
       }
 
@@ -338,7 +345,7 @@ export class AgendaService {
   }
 
   private mapAppointments(
-    appointments: AppointmentRecord[],
+    appointments: AppointmentWithMeta[],
     dayStart: Date
   ): AppointmentWindow[] {
     return appointments.map((appointment) => {
@@ -348,7 +355,7 @@ export class AgendaService {
       const endMinutes = Math.max(startMinutes, rawEnd);
 
       return {
-        ...appointment,
+        appointment,
         startMinutes,
         endMinutes,
       };
@@ -420,6 +427,19 @@ export class AgendaService {
     return (
       blocks.find(
         (block) => start < block.endMinutes && end > block.startMinutes
+      ) ?? null
+    );
+  }
+
+  private findAppointmentOverlap(
+    appointments: AppointmentWindow[],
+    start: number,
+    end: number
+  ): AppointmentWindow | null {
+    return (
+      appointments.find(
+        (appointment) =>
+          start < appointment.endMinutes && end > appointment.startMinutes
       ) ?? null
     );
   }

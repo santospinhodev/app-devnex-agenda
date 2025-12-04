@@ -6,6 +6,8 @@ import {
 import { BlockType } from "@prisma/client";
 import { DateTime } from "luxon";
 import { PrismaService } from "../../../database/prisma.service";
+import { AppointmentWithMeta } from "../../appointments/types/appointment.types";
+import { AppointmentsService } from "../../appointments/services/appointments.service";
 import {
   AuthorizedBarberProfile,
   BarberAvailabilityService,
@@ -15,6 +17,7 @@ import { BarberAvailabilityRecord } from "../barber-availability/repositories/ba
 import { BarberBlockRecord } from "../barber-block/repositories/barber-block.repository";
 import { BarberBlockService } from "../barber-block/services/barber-block.service";
 import { FinalTimelineEntry, FinalWeekDay } from "../types/agenda.types";
+import { buildSlotAppointmentDetails } from "../utils/appointment.utils";
 import { minutesToTime, timeStringToMinutes } from "../utils/time.utils";
 
 interface TimelineContext {
@@ -35,6 +38,12 @@ interface BlockWindow {
   source: "BARBER_BLOCK" | "LUNCH";
 }
 
+interface TimelineAppointmentWindow {
+  startMinutes: number;
+  endMinutes: number;
+  record: AppointmentWithMeta;
+}
+
 @Injectable()
 export class AgendaTimelineBuilderService {
   private static readonly MINUTES_PER_DAY = 24 * 60;
@@ -44,7 +53,8 @@ export class AgendaTimelineBuilderService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly barberAvailabilityService: BarberAvailabilityService,
-    private readonly barberBlockService: BarberBlockService
+    private readonly barberBlockService: BarberBlockService,
+    private readonly appointmentsService: AppointmentsService
   ) {}
 
   async buildFinalDayTimeline(
@@ -59,8 +69,19 @@ export class AgendaTimelineBuilderService {
       dayStart.toUTC().toJSDate(),
       dayStart.plus({ days: 1 }).toUTC().toJSDate()
     );
+    const appointments =
+      await this.appointmentsService.getBarberAppointmentsInRange(
+        context.profile,
+        dayStart.toUTC().toJSDate(),
+        dayStart.plus({ days: 1 }).toUTC().toJSDate()
+      );
 
-    return this.composeDayTimeline(context, dayStart, blockRecords);
+    return this.composeDayTimeline(
+      context,
+      dayStart,
+      blockRecords,
+      appointments
+    );
   }
 
   async buildFinalWeekTimeline(
@@ -77,6 +98,12 @@ export class AgendaTimelineBuilderService {
       weekStart.toUTC().toJSDate(),
       weekEnd.toUTC().toJSDate()
     );
+    const weekAppointments =
+      await this.appointmentsService.getBarberAppointmentsInRange(
+        context.profile,
+        weekStart.toUTC().toJSDate(),
+        weekEnd.toUTC().toJSDate()
+      );
 
     const days: FinalWeekDay[] = [];
     for (let i = 0; i < 7; i += 1) {
@@ -86,9 +113,24 @@ export class AgendaTimelineBuilderService {
         dayStart,
         context.timeZone
       );
+      const dayAppointments = weekAppointments.filter((appointment) => {
+        const start = DateTime.fromJSDate(appointment.startAt, {
+          zone: "utc",
+        }).setZone(context.timeZone);
+        const end = DateTime.fromJSDate(appointment.endAt, {
+          zone: "utc",
+        }).setZone(context.timeZone);
+        const nextDay = dayStart.plus({ days: 1 });
+        return start < nextDay && end > dayStart;
+      });
       days.push({
         date: dayStart.toISODate() ?? dayStart.toFormat("yyyy-LL-dd"),
-        slots: this.composeDayTimeline(context, dayStart, dayBlocks),
+        slots: this.composeDayTimeline(
+          context,
+          dayStart,
+          dayBlocks,
+          dayAppointments
+        ),
       });
     }
 
@@ -137,12 +179,18 @@ export class AgendaTimelineBuilderService {
   private composeDayTimeline(
     context: TimelineContext,
     dayStart: DateTime,
-    blockRecords: BarberBlockRecord[]
+    blockRecords: BarberBlockRecord[],
+    appointments: AppointmentWithMeta[]
   ): FinalTimelineEntry[] {
     const dayOfWeek = this.resolveDayOfWeekIndex(dayStart);
     const availability = context.availabilityMap.get(dayOfWeek) ?? null;
     const blockWindows = this.createBlockWindows(
       blockRecords,
+      dayStart,
+      context.timeZone
+    );
+    const appointmentWindows = this.createAppointmentWindows(
+      appointments,
       dayStart,
       context.timeZone
     );
@@ -155,7 +203,8 @@ export class AgendaTimelineBuilderService {
     return this.generateTimelineEntries(
       context.barbershop,
       availability,
-      blockWindows
+      blockWindows,
+      appointmentWindows
     );
   }
 
@@ -232,6 +281,46 @@ export class AgendaTimelineBuilderService {
     return windows.sort((a, b) => a.startMinutes - b.startMinutes);
   }
 
+  private createAppointmentWindows(
+    appointments: AppointmentWithMeta[],
+    dayStart: DateTime,
+    timeZone: string
+  ): TimelineAppointmentWindow[] {
+    const windows: TimelineAppointmentWindow[] = [];
+
+    for (const appointment of appointments) {
+      const appointmentStart = DateTime.fromJSDate(appointment.startAt, {
+        zone: "utc",
+      }).setZone(timeZone);
+      const appointmentEnd = DateTime.fromJSDate(appointment.endAt, {
+        zone: "utc",
+      }).setZone(timeZone);
+
+      const relativeStart = appointmentStart.diff(dayStart, "minutes").minutes;
+      const relativeEnd = appointmentEnd.diff(dayStart, "minutes").minutes;
+      const clampedStart = Math.max(
+        0,
+        Math.min(relativeStart, AgendaTimelineBuilderService.MINUTES_PER_DAY)
+      );
+      const clampedEnd = Math.max(
+        0,
+        Math.min(relativeEnd, AgendaTimelineBuilderService.MINUTES_PER_DAY)
+      );
+
+      if (clampedEnd <= clampedStart) {
+        continue;
+      }
+
+      windows.push({
+        startMinutes: clampedStart,
+        endMinutes: clampedEnd,
+        record: appointment,
+      });
+    }
+
+    return windows.sort((a, b) => a.startMinutes - b.startMinutes);
+  }
+
   private createLunchBlockWindow(
     availability: BarberAvailabilityRecord | null
   ): BlockWindow | null {
@@ -257,7 +346,8 @@ export class AgendaTimelineBuilderService {
   private generateTimelineEntries(
     barbershop: TimelineContext["barbershop"],
     availability: BarberAvailabilityRecord | null,
-    blockWindows: BlockWindow[]
+    blockWindows: BlockWindow[],
+    appointmentWindows: TimelineAppointmentWindow[]
   ): FinalTimelineEntry[] {
     const { startMinutes, endMinutes } = this.resolveBusinessWindow(
       barbershop,
@@ -284,6 +374,11 @@ export class AgendaTimelineBuilderService {
       current += interval
     ) {
       const slotEnd = current + interval;
+      const appointmentWindow = this.findAppointmentOverlap(
+        appointmentWindows,
+        current,
+        slotEnd
+      );
       const overlappingBlock = this.findBlockOverlap(
         blockWindows,
         current,
@@ -294,6 +389,15 @@ export class AgendaTimelineBuilderService {
         availabilityEnd !== null &&
         current >= availabilityStart &&
         slotEnd <= availabilityEnd;
+
+      if (appointmentWindow) {
+        entries.push({
+          time: minutesToTime(Math.floor(current)),
+          status: "APPOINTMENT",
+          appointment: buildSlotAppointmentDetails(appointmentWindow.record),
+        });
+        continue;
+      }
 
       const entry = this.resolveEntry(
         current,
@@ -372,6 +476,20 @@ export class AgendaTimelineBuilderService {
     return (
       blocks.find(
         (block) => slotStart < block.endMinutes && slotEnd > block.startMinutes
+      ) ?? null
+    );
+  }
+
+  private findAppointmentOverlap(
+    appointments: TimelineAppointmentWindow[],
+    slotStart: number,
+    slotEnd: number
+  ): TimelineAppointmentWindow | null {
+    return (
+      appointments.find(
+        (appointment) =>
+          slotStart < appointment.endMinutes &&
+          slotEnd > appointment.startMinutes
       ) ?? null
     );
   }

@@ -36,6 +36,17 @@ export class UsersRepository {
     }) as unknown as Promise<UserWithRelations | null>;
   }
 
+  findFirstByPhone(
+    phone: string,
+    tx?: Prisma.TransactionClient
+  ): Promise<UserWithRelations | null> {
+    const client = this.getClient(tx);
+    return client.user.findFirst({
+      where: { phone },
+      include: this.includeRelations(),
+    }) as unknown as Promise<UserWithRelations | null>;
+  }
+
   createUser(
     data: Prisma.UserCreateInput,
     tx?: Prisma.TransactionClient
