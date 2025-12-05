@@ -20,28 +20,28 @@ export class UsersService {
 
   findByEmail(
     email: string,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient,
   ): Promise<UserWithRelations | null> {
     return this.usersRepository.findByEmail(email, tx);
   }
 
   findById(
     id: string,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient,
   ): Promise<UserWithRelations | null> {
     return this.usersRepository.findById(id, tx);
   }
 
   createAdminUser(
     data: CreateAdminUserInput,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient,
   ): Promise<UserWithRelations> {
     return this.createUser(data, tx);
   }
 
   createUser(
     data: CreateUserInput,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient,
   ): Promise<UserWithRelations> {
     return this.usersRepository.createUser(
       {
@@ -50,35 +50,35 @@ export class UsersService {
         phone: data.phone,
         hashedPassword: data.hashedPassword,
       },
-      tx
+      tx,
     );
   }
 
   async assignDefaultPermissions(
     userId: string,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient,
   ): Promise<void> {
     await this.assignPermissions(
       userId,
       [Permission.ADMIN, Permission.BARBER],
-      tx
+      tx,
     );
   }
 
   async assignPermissions(
     userId: string,
     permissions: Permission[],
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient,
   ): Promise<void> {
     for (const permission of permissions) {
       const prismaPermission = await this.usersRepository.upsertPermission(
         permission,
-        tx
+        tx,
       );
       await this.usersRepository.attachPermissionToUser(
         userId,
         prismaPermission.id,
-        tx
+        tx,
       );
     }
   }
@@ -86,7 +86,7 @@ export class UsersService {
   updateUser(
     id: string,
     data: Prisma.UserUpdateInput,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient,
   ): Promise<UserWithRelations> {
     return this.usersRepository.updateUser(id, data, tx);
   }
@@ -94,8 +94,8 @@ export class UsersService {
   mapToAuthUser(user: UserWithRelations): AuthUser {
     const permissions = Array.from(
       new Set(
-        user.permissions.map(({ permission }) => permission.name as Permission)
-      )
+        user.permissions.map(({ permission }) => permission.name as Permission),
+      ),
     );
 
     const barbershopReference =
@@ -104,18 +104,27 @@ export class UsersService {
       user.ownedBarbershops?.[0] ??
       null;
 
+    const barberProfile = user.barberProfile
+      ? {
+          id: user.barberProfile.id,
+          barbershopId: user.barberProfile.barbershopId,
+        }
+      : null;
+
     return {
       id: user.id,
       email: user.email,
       name: user.name,
       phone: user.phone,
       permissions,
+      roles: permissions,
       barbershop: barbershopReference
         ? {
             id: barbershopReference.id,
             name: barbershopReference.name,
           }
         : null,
+      barberProfile,
     };
   }
 }

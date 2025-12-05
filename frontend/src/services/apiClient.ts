@@ -5,6 +5,7 @@ import axios, {
   InternalAxiosRequestConfig,
 } from "axios";
 import { destroyCookie, parseCookies, setCookie } from "nookies";
+import { AuthUser } from "@/src/types/auth";
 
 export interface AuthTokens {
   accessToken: string;
@@ -12,17 +13,7 @@ export interface AuthTokens {
 }
 
 export interface AuthResponse extends AuthTokens {
-  user: {
-    id: string;
-    email: string;
-    name?: string | null;
-    phone?: string | null;
-    permissions: string[];
-    barbershop?: {
-      id: string;
-      name: string;
-    } | null;
-  };
+  user: AuthUser;
 }
 
 const ACCESS_TOKEN_COOKIE = "devnex.accessToken";
