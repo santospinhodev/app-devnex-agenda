@@ -1,0 +1,167 @@
+"use client";
+
+import { ReactNode, useEffect } from "react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { Calendar, DollarSign, LucideIcon, User, Users } from "lucide-react";
+import { Logo } from "@/src/components/Logo";
+import { useAuth } from "@/src/contexts/AuthContext";
+import { Button } from "@/src/components/ui/Button";
+
+interface DashboardLayoutProps {
+  children: ReactNode;
+}
+
+interface NavItem {
+  label: string;
+  href: string;
+  icon: LucideIcon;
+  disabled?: boolean;
+}
+
+const NAV_ITEMS: NavItem[] = [
+  {
+    label: "Agenda",
+    href: "/dashboard",
+    icon: Calendar,
+  },
+  {
+    label: "Clientes",
+    href: "/clientes",
+    icon: Users,
+    disabled: true,
+  },
+  {
+    label: "Financeiro",
+    href: "/financeiro",
+    icon: DollarSign,
+    disabled: true,
+  },
+  {
+    label: "Perfil",
+    href: "/perfil",
+    icon: User,
+    disabled: true,
+  },
+];
+
+function NavEntry({
+  item,
+  isActive,
+  layout,
+}: {
+  item: NavItem;
+  isActive: boolean;
+  layout: "sidebar" | "bottom";
+}) {
+  const ItemIcon = item.icon;
+  const baseStyles =
+    "flex rounded-lg px-3 py-2 text-sm font-medium transition-colors";
+  const layoutStyles =
+    layout === "sidebar"
+      ? "items-center gap-2"
+      : "flex-1 flex-col items-center gap-1 text-xs";
+  const sidebarStyles = isActive
+    ? "bg-primary/10 text-primary"
+    : "text-slate-500 hover:text-primary";
+  const bottomStyles = isActive
+    ? "text-primary"
+    : "text-slate-500 hover:text-primary";
+  const disabledStyles = "cursor-not-allowed text-slate-300";
+  const className = `${baseStyles} ${layoutStyles} ${
+    layout === "sidebar" ? sidebarStyles : bottomStyles
+  } ${item.disabled ? disabledStyles : ""}`;
+
+  const content = (
+    <>
+      <ItemIcon className="h-4 w-4" aria-hidden />
+      <span>{item.label}</span>
+    </>
+  );
+
+  if (item.disabled) {
+    return (
+      <div className={className} aria-disabled>
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <Link className={className} href={item.href} prefetch={false}>
+      {content}
+    </Link>
+  );
+}
+
+export function DashboardLayout({ children }: DashboardLayoutProps) {
+  const { user, isAuthenticated, isBootstrapping, signOut } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  useEffect(() => {
+    if (!isBootstrapping && !isAuthenticated) {
+      router.replace("/login");
+    }
+  }, [isAuthenticated, isBootstrapping, router]);
+
+  if (isBootstrapping) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <p className="text-sm text-slate-500">Carregando painel...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
+
+  return (
+    <div className="flex min-h-screen bg-slate-50">
+      <aside className="hidden w-64 flex-col border-r border-slate-100 bg-white px-6 py-8 lg:flex">
+        <Logo size="md" />
+        <nav className="mt-8 space-y-1">
+          {NAV_ITEMS.map((item) => (
+            <NavEntry
+              key={item.label}
+              item={item}
+              isActive={pathname === item.href}
+              layout="sidebar"
+            />
+          ))}
+        </nav>
+      </aside>
+      <div className="flex flex-1 flex-col">
+        <header className="sticky top-0 z-10 border-b border-slate-100 bg-white/80 backdrop-blur">
+          <div className="flex items-center justify-between px-4 py-4 lg:px-8">
+            <div>
+              <p className="text-sm text-slate-500">Olá</p>
+              <p className="text-xl font-semibold text-slate-900">
+                {user.name ?? "Barbeiro"}
+              </p>
+            </div>
+            <Button variant="outline" onClick={signOut}>
+              Sair
+            </Button>
+          </div>
+        </header>
+        <main className="flex-1 overflow-y-auto px-4 py-6 lg:px-8 lg:py-8">
+          {children}
+        </main>
+        <nav className="sticky bottom-0 border-t border-slate-100 bg-white px-2 py-2 lg:hidden">
+          <div className="flex items-center justify-between">
+            {NAV_ITEMS.map((item) => (
+              <NavEntry
+                key={`${item.label}-mobile`}
+                item={item}
+                isActive={pathname === item.href}
+                layout="bottom"
+              />
+            ))}
+          </div>
+        </nav>
+      </div>
+    </div>
+  );
+}
