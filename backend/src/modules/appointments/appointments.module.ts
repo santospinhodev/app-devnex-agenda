@@ -8,6 +8,7 @@ import { AppointmentsController } from "./controllers/appointments.controller";
 import { AppointmentsService } from "./services/appointments.service";
 import { AppointmentsRepository } from "./repositories/appointments.repository";
 import { NotificationsModule } from "../notifications/notifications.module";
+import { FinanceModule } from "../finance/finance.module";
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { NotificationsModule } from "../notifications/notifications.module";
     BarberAvailabilityModule,
     UsersModule,
     NotificationsModule,
+    FinanceModule,
   ],
   controllers: [AppointmentsController],
   providers: [

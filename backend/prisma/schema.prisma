@@ -12,6 +12,7 @@ enum AppointmentStatus {
   PENDING
   CONFIRMED
   COMPLETED
+  DONE
   CANCELLED
   NO_SHOW
 }
@@ -21,6 +22,22 @@ enum PaymentType {
   CARD
   TRANSFER
   OTHER
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  PIX
+}
+
+enum CashFlowType {
+  INCOME
+  EXPENSE
+}
+
+enum CommissionStatus {
+  PENDING
+  PAID
 }
 
 enum BlockType {
@@ -54,6 +71,7 @@ model User {
   financialRecords       FinancialRecord[]
   notificationLogs       NotificationLog[]
   auditLogs              AuditLog[]        @relation("auditActor")
+  commissions            Commission[]     @relation("UserCommissions")
 
   @@map("users")
 }
@@ -83,6 +101,8 @@ model Barbershop {
   services      Service[]
   appointments  Appointment[]
   blocks        BarberBlock[]
+  cashFlows     CashFlow[]        @relation("BarbershopCashFlows")
+  commissions   Commission[]      @relation("BarbershopCommissions")
 
   @@index([ownerId])
   @@map("barbershops")
@@ -151,6 +171,8 @@ model Appointment {
   barbershop      Barbershop        @relation(fields: [barbershopId], references: [id])
   notifications   NotificationLog[]
   financialRecord FinancialRecord?
+  cashFlows       CashFlow[]        @relation("AppointmentCashFlow")
+  commission      Commission?       @relation("AppointmentCommission")
 
   @@index([barberId, startAt])
   @@index([customerId, startAt])
@@ -265,6 +287,44 @@ model FinancialRecord {
   updatedAt     DateTime     @updatedAt
 
   @@map("financial_records")
+}
+
+model CashFlow {
+  id            String         @id @default(uuid())
+  barbershopId  String
+  appointmentId String?
+  type          CashFlowType
+  paymentMethod PaymentMethod
+  amount        Decimal        @db.Decimal(10, 2)
+  description   String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  barbershop Barbershop @relation("BarbershopCashFlows", fields: [barbershopId], references: [id])
+  appointment Appointment? @relation("AppointmentCashFlow", fields: [appointmentId], references: [id])
+
+  @@index([barbershopId, createdAt])
+  @@index([appointmentId])
+  @@map("cash_flows")
+}
+
+model Commission {
+  id            String           @id @default(uuid())
+  appointmentId String           @unique
+  barberId      String
+  barbershopId  String
+  amount        Decimal          @db.Decimal(10, 2)
+  status        CommissionStatus @default(PENDING)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  appointment Appointment @relation("AppointmentCommission", fields: [appointmentId], references: [id])
+  barber      User        @relation("UserCommissions", fields: [barberId], references: [id])
+  barbershop  Barbershop  @relation("BarbershopCommissions", fields: [barbershopId], references: [id])
+
+  @@index([barberId])
+  @@index([barbershopId])
+  @@map("commissions")
 }
 
 model NotificationLog {

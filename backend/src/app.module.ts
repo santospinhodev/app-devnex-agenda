@@ -11,6 +11,7 @@ import { UserProfilesModule } from "./modules/user-profiles/user-profiles.module
 import { AgendaModule } from "./modules/agenda/agenda.module";
 import { AppointmentsModule } from "./modules/appointments/appointments.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
+import { FinanceModule } from "./modules/finance/finance.module";
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { NotificationsModule } from "./modules/notifications/notifications.modul
     UserProfilesModule,
     AgendaModule,
     AppointmentsModule,
+    FinanceModule,
     NotificationsModule,
   ],
 })

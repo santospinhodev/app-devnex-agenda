@@ -15,6 +15,7 @@ import { Permissions } from "../../../common/decorators/permissions.decorator";
 import { Permission } from "../../../common/enums/permission.enum";
 import { CreateAppointmentDto } from "../dto/create-appointment.dto";
 import { RescheduleAppointmentDto } from "../dto/reschedule-appointment.dto";
+import { FinishAppointmentDto } from "../dto/finish-appointment.dto";
 import { AppointmentsService } from "../services/appointments.service";
 import { AppointmentResponse } from "../types/appointment.types";
 
@@ -56,5 +57,15 @@ export class AppointmentsController {
     @Param("id", new ParseUUIDPipe()) id: string,
   ): Promise<AppointmentResponse> {
     return this.appointmentsService.cancelAppointment(req.user, id);
+  }
+
+  @Patch(":id/finish")
+  @Permissions(Permission.ADMIN, Permission.BARBER, Permission.RECEPTIONIST)
+  finishAppointment(
+    @Req() req: AuthenticatedRequest,
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Body() dto: FinishAppointmentDto,
+  ): Promise<AppointmentResponse> {
+    return this.appointmentsService.finishAppointment(req.user, id, dto);
   }
 }

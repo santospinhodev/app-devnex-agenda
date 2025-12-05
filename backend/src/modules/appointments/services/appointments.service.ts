@@ -19,6 +19,7 @@ import { UsersRepository } from "../../users/repositories/users.repository";
 import { UserWithRelations } from "../../users/types/user-with-relations.type";
 import { NotificationsService } from "../../notifications/notifications.service";
 import { NotificationJobMetadata } from "../../notifications/dto/send-whatsapp-template.dto";
+import { FinishAppointmentDto } from "../dto/finish-appointment.dto";
 import {
   CreateAppointmentCustomerDto,
   CreateAppointmentDto,
@@ -32,6 +33,7 @@ import {
   AppointmentResponse,
   AppointmentWithMeta,
 } from "../types/appointment.types";
+import { FinanceService } from "../../finance/services/finance.service";
 
 interface NormalizedCustomerPayload {
   name: string;
@@ -49,6 +51,7 @@ export class AppointmentsService {
     private readonly barberAvailabilityService: BarberAvailabilityService,
     private readonly usersRepository: UsersRepository,
     private readonly notificationsService: NotificationsService,
+    private readonly financeService: FinanceService,
   ) {}
 
   async createAppointment(
@@ -246,6 +249,55 @@ export class AppointmentsService {
     return this.serializeAppointment(updated);
   }
 
+  async finishAppointment(
+    actor: RequestActor,
+    appointmentId: string,
+    dto: FinishAppointmentDto,
+  ): Promise<AppointmentResponse> {
+    this.assertFinishPermissions(actor);
+
+    const { appointment: authorizedAppointment } =
+      await this.getAuthorizedAppointment(actor, appointmentId);
+
+    if (authorizedAppointment.status !== AppointmentStatus.CONFIRMED) {
+      throw new BadRequestException(
+        "Only confirmed appointments can be finished",
+      );
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const appointment = await this.appointmentsRepository.findById(
+        appointmentId,
+        tx,
+      );
+
+      if (!appointment) {
+        throw new NotFoundException("Appointment not found");
+      }
+
+      if (appointment.status !== AppointmentStatus.CONFIRMED) {
+        throw new BadRequestException(
+          "Only confirmed appointments can be finished",
+        );
+      }
+
+      const result = await this.appointmentsRepository.updateAppointment(
+        appointment.id,
+        { status: AppointmentStatus.DONE },
+        tx,
+      );
+
+      await this.financeService.recordIncome(tx, {
+        appointment,
+        paymentMethod: dto.paymentMethod,
+      });
+
+      return result;
+    });
+
+    return this.serializeAppointment(this.mapAppointment(updated));
+  }
+
   async getBarberAppointmentsInRange(
     profile: AuthorizedBarberProfile,
     start: Date,
@@ -291,6 +343,21 @@ export class AppointmentsService {
     );
   }
 
+  private assertFinishPermissions(actor: RequestActor) {
+    const permissions = new Set(actor.permissions);
+    if (
+      permissions.has(Permission.ADMIN) ||
+      permissions.has(Permission.RECEPTIONIST) ||
+      permissions.has(Permission.BARBER)
+    ) {
+      return;
+    }
+
+    throw new ForbiddenException(
+      "You do not have permission to finish appointments",
+    );
+  }
+
   private async getAuthorizedAppointment(
     actor: RequestActor,
     appointmentId: string,
@@ -331,6 +398,12 @@ export class AppointmentsService {
     if (appointment.status === AppointmentStatus.COMPLETED) {
       throw new BadRequestException(
         `Cannot ${action} an appointment that is already completed`,
+      );
+    }
+
+    if (appointment.status === AppointmentStatus.DONE) {
+      throw new BadRequestException(
+        `Cannot ${action} an appointment that is already done`,
       );
     }
 
