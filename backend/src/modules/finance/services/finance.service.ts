@@ -18,6 +18,7 @@ import {
 import { Permission } from "../../../common/enums/permission.enum";
 import { AppointmentWithRelations } from "../../appointments/repositories/appointments.repository";
 import { FinishPaymentMethod } from "../../appointments/dto/finish-appointment.dto";
+import { CreateManualTransactionDto } from "../dto/create-manual-transaction.dto";
 
 interface RecordIncomeParams {
   appointment: AppointmentWithRelations;
@@ -55,12 +56,69 @@ export interface BarberBalanceSummary {
   }>;
 }
 
+export interface MonthlyCashDailyBreakdown {
+  date: string;
+  income: string;
+  expense: string;
+  net: string;
+}
+
+export interface MonthlyCashSummary {
+  month: string;
+  totalIncome: string;
+  totalExpense: string;
+  netTotal: string;
+  dailyBreakdown: MonthlyCashDailyBreakdown[];
+}
+
 @Injectable()
 export class FinanceService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly barbershopService: BarbershopService,
   ) {}
+
+  async createManualTransaction(
+    actor: BarbershopRequestActor,
+    dto: CreateManualTransactionDto,
+  ): Promise<DailyCashTransaction> {
+    const barbershop =
+      await this.barbershopService.getBarbershopForActor(actor);
+
+    if (!barbershop) {
+      throw new NotFoundException("Barbershop not found for this user");
+    }
+
+    let amount: Prisma.Decimal;
+    try {
+      amount = new Prisma.Decimal(dto.amount);
+    } catch (error) {
+      throw new BadRequestException("Amount must be a valid monetary value");
+    }
+
+    if (amount.lte(0)) {
+      throw new BadRequestException("Amount must be greater than zero");
+    }
+
+    const transaction = await this.prisma.cashFlow.create({
+      data: {
+        barbershopId: barbershop.id,
+        type: dto.type,
+        paymentMethod: dto.paymentMethod,
+        amount,
+        description: dto.description,
+      },
+    });
+
+    return {
+      id: transaction.id,
+      appointmentId: transaction.appointmentId,
+      type: transaction.type,
+      amount: transaction.amount.toString(),
+      paymentMethod: transaction.paymentMethod,
+      createdAt: transaction.createdAt.toISOString(),
+    };
+  }
 
   async recordIncome(
     tx: Prisma.TransactionClient,
@@ -192,6 +250,78 @@ export class FinanceService {
     };
   }
 
+  async getMonthlyCashSummary(
+    actor: BarbershopRequestActor,
+    month?: string,
+  ): Promise<MonthlyCashSummary> {
+    const barbershop =
+      await this.barbershopService.getBarbershopForActor(actor);
+
+    if (!barbershop) {
+      throw new NotFoundException("Barbershop not found for this user");
+    }
+
+    const { start, end, label } = this.resolveMonthRange(month);
+
+    const transactions = await this.prisma.cashFlow.findMany({
+      where: {
+        barbershopId: barbershop.id,
+        createdAt: {
+          gte: start,
+          lt: end,
+        },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    const incomeTotal = this.sumAmounts(
+      transactions.filter((entry) => entry.type === CashFlowType.INCOME),
+    );
+    const expenseTotal = this.sumAmounts(
+      transactions.filter((entry) => entry.type === CashFlowType.EXPENSE),
+    );
+
+    const dailyMap = new Map<
+      string,
+      { income: Prisma.Decimal; expense: Prisma.Decimal }
+    >();
+
+    for (const entry of transactions) {
+      const day = entry.createdAt.toISOString().slice(0, 10);
+      const current = dailyMap.get(day) ?? {
+        income: new Prisma.Decimal(0),
+        expense: new Prisma.Decimal(0),
+      };
+
+      if (!dailyMap.has(day)) {
+        dailyMap.set(day, current);
+      }
+
+      if (entry.type === CashFlowType.INCOME) {
+        current.income = current.income.add(entry.amount);
+      } else {
+        current.expense = current.expense.add(entry.amount);
+      }
+    }
+
+    const dailyBreakdown = Array.from(dailyMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, values]) => ({
+        date,
+        income: values.income.toString(),
+        expense: values.expense.toString(),
+        net: values.income.sub(values.expense).toString(),
+      }));
+
+    return {
+      month: label,
+      totalIncome: incomeTotal.toString(),
+      totalExpense: expenseTotal.toString(),
+      netTotal: incomeTotal.sub(expenseTotal).toString(),
+      dailyBreakdown,
+    };
+  }
+
   private mapPaymentMethod(method: FinishPaymentMethod): PaymentMethod {
     switch (method) {
       case FinishPaymentMethod.CARD:
@@ -217,6 +347,40 @@ export class FinanceService {
     );
     const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
     const label = start.toISOString().slice(0, 10);
+    return { start, end, label };
+  }
+
+  private resolveMonthRange(month?: string) {
+    if (month && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+      throw new BadRequestException("Invalid month parameter");
+    }
+
+    let reference: Date;
+
+    if (month) {
+      const [yearStr, monthStr] = month.split("-");
+      const year = Number(yearStr);
+      const monthIndex = Number(monthStr) - 1;
+      reference = new Date(Date.UTC(year, monthIndex, 1));
+    } else {
+      const now = new Date();
+      reference = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+      );
+    }
+
+    if (Number.isNaN(reference.getTime())) {
+      throw new BadRequestException("Invalid month parameter");
+    }
+
+    const start = reference;
+    const end = new Date(
+      Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth() + 1, 1),
+    );
+    const label = `${reference.getUTCFullYear()}-${(reference.getUTCMonth() + 1)
+      .toString()
+      .padStart(2, "0")}`;
+
     return { start, end, label };
   }
 
