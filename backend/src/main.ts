@@ -10,12 +10,16 @@ async function bootstrap(): Promise<void> {
   const prismaService = app.get(PrismaService);
 
   app.setGlobalPrefix("api/v1");
+  app.enableCors({
+    origin: configService.get<string>("FRONTEND_URL", "http://localhost:3001"),
+    credentials: true,
+  });
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
-    })
+    }),
   );
 
   await prismaService.enableShutdownHooks(app);
