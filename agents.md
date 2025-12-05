@@ -341,8 +341,6 @@ Após qualquer entrega, o DevSenior deve sempre concluir com:
 “Tarefa concluída conforme prompt do Agent DevLeader.
 Varredura completa executada. Nenhum erro encontrado / erros corrigidos conforme listado.”
 
-Ao entregar o relatório, você deve colar as últimas 3 linhas do log do terminal mostrando o sucesso do comando npm run build. Não aceite apenas sua própria palavra; mostre a prova do terminal.
-
 9. Estado Atual
 
 Este é o documento oficial e cumulativo do Agent DevSenior.
