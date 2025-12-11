@@ -1,9 +1,9 @@
 "use client";
 
-import { ReactNode, useEffect } from "react";
+import { ReactNode, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Calendar, DollarSign, LucideIcon, User, Users } from "lucide-react";
+import { Calendar, LucideIcon, User, Users } from "lucide-react";
 import { Logo } from "@/src/components/Logo";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { Button } from "@/src/components/ui/Button";
@@ -19,29 +19,24 @@ interface NavItem {
   disabled?: boolean;
 }
 
-const NAV_ITEMS: NavItem[] = [
+const BASE_NAV_ITEMS: NavItem[] = [
   {
     label: "Agenda",
     href: "/dashboard",
     icon: Calendar,
   },
   {
-    label: "Clientes",
-    href: "/clientes",
-    icon: Users,
-    disabled: true,
-  },
-  {
-    label: "Financeiro",
-    href: "/financeiro",
-    icon: DollarSign,
-    disabled: true,
-  },
-  {
     label: "Perfil",
-    href: "/perfil",
+    href: "/profile",
     icon: User,
-    disabled: true,
+  },
+];
+
+const ADMIN_NAV_ITEMS: NavItem[] = [
+  {
+    label: "Equipe",
+    href: "/team",
+    icon: Users,
   },
 ];
 
@@ -98,6 +93,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { user, isAuthenticated, isBootstrapping, signOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const isAdmin = useMemo(
+    () => Boolean(user?.permissions?.includes("ADMIN")),
+    [user]
+  );
+  const navItems = useMemo(
+    () => [...BASE_NAV_ITEMS, ...(isAdmin ? ADMIN_NAV_ITEMS : [])],
+    [isAdmin]
+  );
 
   useEffect(() => {
     if (!isBootstrapping && !isAuthenticated) {
@@ -122,7 +125,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       <aside className="hidden w-64 flex-col border-r border-brand-yellow bg-brand-navy px-6 py-8 lg:flex">
         <Logo size="sm" />
         <nav className="mt-8 space-y-1">
-          {NAV_ITEMS.map((item) => (
+          {navItems.map((item) => (
             <NavEntry
               key={item.label}
               item={item}
@@ -151,7 +154,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         </main>
         <nav className="sticky bottom-0 border-t border-white bg-brand-navy px-2 py-2 lg:hidden">
           <div className="flex items-center justify-between">
-            {NAV_ITEMS.map((item) => (
+            {navItems.map((item) => (
               <NavEntry
                 key={`${item.label}-mobile`}
                 item={item}

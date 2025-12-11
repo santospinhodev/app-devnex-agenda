@@ -30,3 +30,17 @@ export interface FinalTimelineEntry {
   source?: "BARBER_BLOCK" | "LUNCH";
   appointment?: TimelineAppointmentDetails;
 }
+
+export interface BarberAvailabilityEntry {
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  lunchStart: string | null;
+  lunchEnd: string | null;
+  slotInterval: number;
+}
+
+export interface BarberAvailabilityResponse {
+  barberId: string;
+  availability: BarberAvailabilityEntry[];
+}
