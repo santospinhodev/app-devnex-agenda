@@ -17,10 +17,16 @@ interface NewAppointmentModalProps {
   onSuccess: () => void;
 }
 
-const normalizeDate = (value: Date) => {
-  const normalized = new Date(value);
-  normalized.setHours(0, 0, 0, 0);
-  return normalized.toISOString().split("T")[0];
+const formatDateForPayload = (value: Date) => {
+  const normalized = new Date(
+    value.getFullYear(),
+    value.getMonth(),
+    value.getDate()
+  );
+  const year = normalized.getFullYear();
+  const month = String(normalized.getMonth() + 1).padStart(2, "0");
+  const day = String(normalized.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 };
 
 const formatHumanDate = (value: Date) =>
@@ -78,7 +84,7 @@ export function NewAppointmentModal({
       await apiClient.post("/agendamentos", {
         barberId,
         serviceId: form.serviceId.trim(),
-        date: normalizeDate(date),
+        date: formatDateForPayload(date),
         time: slot.time,
         customer: {
           name: form.customerName.trim(),

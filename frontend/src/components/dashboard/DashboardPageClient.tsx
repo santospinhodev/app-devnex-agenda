@@ -13,15 +13,20 @@ import { FinalTimelineEntry } from "@/src/types/agenda";
 import { NewAppointmentModal } from "@/src/components/agenda/NewAppointmentModal";
 import { Toast } from "@/src/components/ui/Toast";
 
-const normalizeDate = (value: Date) => {
-  const normalized = new Date(value);
-  normalized.setHours(0, 0, 0, 0);
-  return normalized;
-};
+const normalizeDate = (value: Date) =>
+  new Date(value.getFullYear(), value.getMonth(), value.getDate());
 
 const parseDateParam = (raw: string | null): Date => {
   if (!raw) {
     return normalizeDate(new Date());
+  }
+
+  const isoMatcher = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatcher) {
+    const [, year, month, day] = isoMatcher;
+    return normalizeDate(
+      new Date(Number(year), Number(month) - 1, Number(day))
+    );
   }
 
   const parsed = new Date(raw);
@@ -32,8 +37,13 @@ const parseDateParam = (raw: string | null): Date => {
   return normalizeDate(parsed);
 };
 
-const formatDateParam = (date: Date) =>
-  normalizeDate(date).toISOString().split("T")[0];
+const formatDateParam = (date: Date) => {
+  const normalized = normalizeDate(date);
+  const year = normalized.getFullYear();
+  const month = String(normalized.getMonth() + 1).padStart(2, "0");
+  const day = String(normalized.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 
 export function DashboardPageClient() {
   const searchParams = useSearchParams();
