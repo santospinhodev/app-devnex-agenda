@@ -3,7 +3,15 @@
 import { ReactNode, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Calendar, LucideIcon, User, Users } from "lucide-react";
+import {
+  Calendar,
+  LucideIcon,
+  Scissors,
+  User,
+  UserCog,
+  Users,
+  Wallet,
+} from "lucide-react";
 import { Logo } from "@/src/components/Logo";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { Button } from "@/src/components/ui/Button";
@@ -32,13 +40,31 @@ const BASE_NAV_ITEMS: NavItem[] = [
   },
 ];
 
-const ADMIN_NAV_ITEMS: NavItem[] = [
-  {
-    label: "Equipe",
-    href: "/team",
-    icon: Users,
-  },
-];
+const buildManagementNav = (permissions: Set<string>): NavItem[] => {
+  const items: NavItem[] = [];
+
+  if (permissions.has("ADMIN") || permissions.has("BARBER")) {
+    items.push({ label: "Serviços", href: "/services", icon: Scissors });
+  }
+
+  if (
+    permissions.has("ADMIN") ||
+    permissions.has("BARBER") ||
+    permissions.has("RECEPTIONIST")
+  ) {
+    items.push({ label: "Clientes", href: "/clients", icon: Users });
+  }
+
+  if (permissions.has("ADMIN") || permissions.has("RECEPTIONIST")) {
+    items.push({ label: "Financeiro", href: "/finance", icon: Wallet });
+  }
+
+  if (permissions.has("ADMIN")) {
+    items.push({ label: "Equipe", href: "/team", icon: UserCog });
+  }
+
+  return items;
+};
 
 function NavEntry({
   item,
@@ -93,13 +119,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { user, isAuthenticated, isBootstrapping, signOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  const isAdmin = useMemo(
-    () => Boolean(user?.permissions?.includes("ADMIN")),
-    [user]
+  const permissions = useMemo(
+    () => new Set(user?.permissions ?? []),
+    [user?.permissions]
   );
   const navItems = useMemo(
-    () => [...BASE_NAV_ITEMS, ...(isAdmin ? ADMIN_NAV_ITEMS : [])],
-    [isAdmin]
+    () => [...BASE_NAV_ITEMS, ...buildManagementNav(permissions)],
+    [permissions]
   );
 
   useEffect(() => {

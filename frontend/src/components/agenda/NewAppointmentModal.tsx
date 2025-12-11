@@ -7,6 +7,8 @@ import { Input } from "@/src/components/ui/Input";
 import { Button } from "@/src/components/ui/Button";
 import { apiClient } from "@/src/services/apiClient";
 import { FinalTimelineEntry } from "@/src/types/agenda";
+import { BarbershopServiceItem } from "@/src/types/services";
+import { formatCurrency, formatDuration } from "@/src/utils/formatters";
 
 interface NewAppointmentModalProps {
   open: boolean;
@@ -56,6 +58,9 @@ export function NewAppointmentModal({
   const [form, setForm] = useState(INITIAL_FORM);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [services, setServices] = useState<BarbershopServiceItem[]>([]);
+  const [isLoadingServices, setIsLoadingServices] = useState(false);
+  const [servicesError, setServicesError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -64,8 +69,39 @@ export function NewAppointmentModal({
     }
   }, [open]);
 
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const controller = new AbortController();
+    setIsLoadingServices(true);
+    setServicesError(null);
+
+    apiClient
+      .get<BarbershopServiceItem[]>("/services", {
+        signal: controller.signal,
+      })
+      .then((response) => {
+        setServices(response.data);
+      })
+      .catch((err) => {
+        if (!axios.isCancel(err)) {
+          setServicesError("Não foi possível carregar os serviços.");
+        }
+      })
+      .finally(() => {
+        setIsLoadingServices(false);
+      });
+
+    return () => controller.abort();
+  }, [open]);
+
   const readableDate = useMemo(() => formatHumanDate(date), [date]);
   const slotTime = slot?.time ?? "--:--";
+  const selectedService = useMemo(
+    () => services.find((service) => service.id === form.serviceId) ?? null,
+    [form.serviceId, services]
+  );
 
   const handleChange = (field: keyof typeof INITIAL_FORM, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -150,17 +186,56 @@ export function NewAppointmentModal({
             placeholder="João da Silva"
             required
           />
-          <Input
-            label="Serviço (ID)"
-            value={form.serviceId}
-            onChange={(event) => handleChange("serviceId", event.target.value)}
-            placeholder="Digite o ID do serviço"
-            required
-          />
-          <p className="text-xs text-slate-500">
-            Use o ID do serviço cadastrado na plataforma. Suporte a seleção
-            visual chegará na próxima fase.
-          </p>
+          <div>
+            <label className="text-sm font-medium text-slate-700">
+              Serviço
+            </label>
+            <div className="mt-1 rounded-2xl border border-slate-200 bg-white px-3 py-1 focus-within:border-brand-yellow focus-within:ring-2 focus-within:ring-brand-yellow/30">
+              <select
+                className="h-11 w-full bg-transparent text-sm text-slate-900 outline-none"
+                value={form.serviceId}
+                onChange={(event) =>
+                  handleChange("serviceId", event.target.value)
+                }
+                disabled={isLoadingServices || services.length === 0}
+                required
+              >
+                <option value="">Selecione um serviço</option>
+                {services.map((service) => (
+                  <option key={service.id} value={service.id}>
+                    {service.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {isLoadingServices && (
+              <p className="mt-1 text-xs text-slate-500">
+                Carregando serviços...
+              </p>
+            )}
+            {servicesError && (
+              <p className="mt-1 text-xs text-red-600">{servicesError}</p>
+            )}
+            {!isLoadingServices && services.length === 0 && !servicesError && (
+              <p className="mt-1 text-xs text-slate-500">
+                Nenhum serviço cadastrado ainda. Cadastre um no menu Serviços.
+              </p>
+            )}
+          </div>
+          {selectedService && (
+            <div className="rounded-2xl bg-slate-50 px-4 py-3">
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                Valor automático
+              </p>
+              <p className="text-xl font-semibold text-slate-900">
+                {formatCurrency(selectedService.price)}
+              </p>
+              <p className="text-xs text-slate-500">
+                Duração aproximada:{" "}
+                {formatDuration(selectedService.durationMin)}
+              </p>
+            </div>
+          )}
           <div>
             <label className="text-sm font-medium text-slate-700">
               Observações (opcional)
