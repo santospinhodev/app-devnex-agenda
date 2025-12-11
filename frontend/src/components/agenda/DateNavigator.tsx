@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
-import { Button } from "@/src/components/ui/Button";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CalendarDays, ChevronDown } from "lucide-react";
+import { Calendar } from "@/src/components/ui/Calendar";
 
 interface DateNavigatorProps {
   value: Date;
@@ -43,40 +44,76 @@ const formatLabel = (value: Date) => {
 
 export function DateNavigator({ value, onChange }: DateNavigatorProps) {
   const label = useMemo(() => formatLabel(value), [value]);
+  const [isOpen, setIsOpen] = useState(false);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
 
-  const updateDate = (delta: number) => {
-    const next = new Date(value);
-    next.setDate(next.getDate() + delta);
-    next.setHours(0, 0, 0, 0);
-    onChange?.(next);
+  useEffect(() => {
+    if (!isOpen) {
+      return undefined;
+    }
+
+    const handleClick = (event: MouseEvent) => {
+      if (!popoverRef.current) {
+        return;
+      }
+      if (!popoverRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClick);
+    document.addEventListener("keyup", handleKey);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keyup", handleKey);
+    };
+  }, [isOpen]);
+
+  const handleSelectDate = (nextDate: Date) => {
+    const normalized = new Date(nextDate);
+    normalized.setHours(0, 0, 0, 0);
+    onChange?.(normalized);
+    setIsOpen(false);
   };
 
   return (
-    <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-brand-yellow bg-brand-blue px-5 py-4 shadow-card">
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.35em] text-white">
-          Agenda
+    <section className="relative rounded-2xl border border-brand-yellow bg-brand-blue px-5 py-4 shadow-card">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.35em] text-white">
+            Agenda
+          </p>
+          <button
+            type="button"
+            onClick={() => setIsOpen((prev) => !prev)}
+            className="mt-1 flex items-center gap-2 text-left text-2xl font-semibold text-white"
+            aria-haspopup="dialog"
+            aria-expanded={isOpen}
+          >
+            <CalendarDays className="h-5 w-5 text-brand-yellow" aria-hidden />
+            <span>{label}</span>
+            <ChevronDown className="h-4 w-4 text-white/80" aria-hidden />
+          </button>
+        </div>
+        <p className="text-sm text-white/80">
+          Navegue pelos dias para ajustar a timeline.
         </p>
-        <p className="text-2xl font-semibold text-white">{label}</p>
       </div>
-      <div className="flex items-center gap-3">
-        <Button
-          type="button"
-          variant="outline"
-          aria-label="Dia anterior"
-          onClick={() => updateDate(-1)}
+      {isOpen && (
+        <div
+          ref={popoverRef}
+          className="absolute left-0 right-0 top-full z-30 mt-3 w-full rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl sm:w-auto"
         >
-          &lt;
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          aria-label="Dia seguinte"
-          onClick={() => updateDate(1)}
-        >
-          &gt;
-        </Button>
-      </div>
+          <Calendar selected={value} onSelect={handleSelectDate} />
+        </div>
+      )}
     </section>
   );
 }

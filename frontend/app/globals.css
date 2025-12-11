@@ -19,6 +19,44 @@
     caret-color: #fff;
     transition: background-color 9999s ease 0s;
   }
+
+  .rdp,
+  .rdp * {
+    box-sizing: border-box;
+  }
+
+  .rdp {
+    --rdp-accent-color: var(--color-brand-yellow);
+    --rdp-background-color: #f8fafc;
+    --rdp-outline: 2px solid var(--color-brand-yellow);
+    margin: 0;
+    width: 100%;
+    font-size: 0.875rem;
+    color: #0f172a;
+  }
+
+  .rdp-caption_label,
+  .rdp-nav_button {
+    color: #0f172a;
+    font-weight: 600;
+  }
+
+  .rdp-nav_button {
+    border-radius: 999px;
+  }
+
+  .rdp-day {
+    border-radius: 999px;
+  }
+
+  .rdp-day_selected:not(.rdp-day_outside) {
+    background-color: var(--color-brand-yellow);
+    color: #0f1d37;
+  }
+
+  .rdp-day_today:not(.rdp-day_selected) {
+    border: 1px solid rgba(20, 45, 75, 0.35);
+  }
 }
 
 @layer utilities {
@@ -40,6 +78,16 @@
       #0f1d37 40%,
       #132a46 75%,
       #1a3d67 100%
+    );
+  }
+
+  .bg-stripe {
+    background-image: repeating-linear-gradient(
+      135deg,
+      #f1f5f9 0,
+      #f1f5f9 12px,
+      #e2e8f0 12px,
+      #e2e8f0 24px
     );
   }
 }
