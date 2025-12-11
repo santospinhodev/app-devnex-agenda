@@ -11,6 +11,7 @@ import { UserProfilesModule } from "./modules/user-profiles/user-profiles.module
 import { AgendaModule } from "./modules/agenda/agenda.module";
 import { AppointmentsModule } from "./modules/appointments/appointments.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
+import { ServicesModule } from "./modules/services/services.module";
 import { FinanceModule } from "./modules/finance/finance.module";
 
 @Module({
@@ -36,6 +37,7 @@ import { FinanceModule } from "./modules/finance/finance.module";
     UserProfilesModule,
     AgendaModule,
     AppointmentsModule,
+    ServicesModule,
     FinanceModule,
     NotificationsModule,
   ],

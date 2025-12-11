@@ -139,6 +139,7 @@ model Service {
   description  String?
   durationMin  Int       @default(30)
   price        Decimal   @db.Decimal(10, 2)
+  commissionPercentage Float?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   deletedAt    DateTime?

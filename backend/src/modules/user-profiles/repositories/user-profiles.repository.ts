@@ -20,7 +20,7 @@ export class UserProfilesRepository {
 
   findBarbersByBarbershop(
     barbershopId: string,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient,
   ): Promise<BarberProfileWithUser[]> {
     const client = this.getClient(tx);
     return client.barberProfile.findMany({
@@ -32,7 +32,7 @@ export class UserProfilesRepository {
 
   findBarberById(
     id: string,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient,
   ): Promise<BarberProfileWithUser | null> {
     const client = this.getClient(tx);
     return client.barberProfile.findUnique({
@@ -43,7 +43,7 @@ export class UserProfilesRepository {
 
   createBarberProfile(
     data: Prisma.BarberProfileCreateInput,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient,
   ): Promise<BarberProfileWithUser> {
     const client = this.getClient(tx);
     return client.barberProfile.create({
@@ -55,7 +55,7 @@ export class UserProfilesRepository {
   updateBarberProfile(
     id: string,
     data: Prisma.BarberProfileUpdateInput,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient,
   ): Promise<BarberProfileWithUser> {
     const client = this.getClient(tx);
     return client.barberProfile.update({
@@ -67,7 +67,7 @@ export class UserProfilesRepository {
 
   findReceptionistsByBarbershop(
     barbershopId: string,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient,
   ): Promise<ReceptionistProfileWithUser[]> {
     const client = this.getClient(tx);
     return client.receptionistProfile.findMany({
@@ -79,7 +79,7 @@ export class UserProfilesRepository {
 
   findReceptionistById(
     id: string,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient,
   ): Promise<ReceptionistProfileWithUser | null> {
     const client = this.getClient(tx);
     return client.receptionistProfile.findUnique({
@@ -90,7 +90,7 @@ export class UserProfilesRepository {
 
   createReceptionistProfile(
     data: Prisma.ReceptionistProfileCreateInput,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient,
   ): Promise<ReceptionistProfileWithUser> {
     const client = this.getClient(tx);
     return client.receptionistProfile.create({
@@ -102,7 +102,7 @@ export class UserProfilesRepository {
   updateReceptionistProfile(
     id: string,
     data: Prisma.ReceptionistProfileUpdateInput,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient,
   ): Promise<ReceptionistProfileWithUser> {
     const client = this.getClient(tx);
     return client.receptionistProfile.update({
@@ -114,11 +114,55 @@ export class UserProfilesRepository {
 
   findCustomerById(
     id: string,
-    tx?: Prisma.TransactionClient
+    tx?: Prisma.TransactionClient,
   ): Promise<CustomerProfileWithBarbershop | null> {
     const client = this.getClient(tx);
     return client.customerProfile.findUnique({
       where: { id },
+      include: customerProfileWithBarbershop.include,
+    });
+  }
+
+  findCustomersByBarbershop(
+    barbershopId: string,
+    search?: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<CustomerProfileWithBarbershop[]> {
+    const client = this.getClient(tx);
+    return client.customerProfile.findMany({
+      where: {
+        barbershopId,
+        ...(search
+          ? {
+              OR: [
+                {
+                  name: {
+                    contains: search,
+                    mode: "insensitive",
+                  },
+                },
+                {
+                  phone: {
+                    contains: search,
+                    mode: "insensitive",
+                  },
+                },
+              ],
+            }
+          : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      include: customerProfileWithBarbershop.include,
+    });
+  }
+
+  createCustomerProfile(
+    data: Prisma.CustomerProfileCreateInput,
+    tx?: Prisma.TransactionClient,
+  ): Promise<CustomerProfileWithBarbershop> {
+    const client = this.getClient(tx);
+    return client.customerProfile.create({
+      data,
       include: customerProfileWithBarbershop.include,
     });
   }
