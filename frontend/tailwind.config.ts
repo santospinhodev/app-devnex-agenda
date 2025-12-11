@@ -10,6 +10,11 @@ const config: Config = {
     extend: {
       colors: {
         primary: "#2B5BA8",
+        brand: {
+          yellow: "var(--color-brand-yellow)",
+          blue: "var(--color-brand-blue)",
+          navy: "var(--color-brand-navy)",
+        },
       },
       borderRadius: {
         xl: "1rem",

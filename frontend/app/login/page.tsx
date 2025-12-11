@@ -47,51 +47,75 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-10">
-      <Card className="w-full max-w-md p-8">
-        <div className="mb-8 space-y-2 text-center">
+    <main className="min-h-screen bg-gradient-mobile md:bg-gradient-desktop flex md:flex-row flex-col px-4 py-10">
+      <div className="left-area hidden md:flex flex-1 items-center justify-center">
+        <Logo size="lg" />
+      </div>
+      <div className="right-area flex flex-1 flex-col items-center justify-center">
+        <div className="mb-10 flex w-full justify-center md:hidden">
           <Logo size="md" />
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-900">
-              Acesse sua conta
-            </h1>
-            <p className="text-sm text-slate-500">
-              Controle sua agenda e financeiro em um só lugar.
-            </p>
-          </div>
         </div>
-        <form className="space-y-5" onSubmit={handleSubmit}>
-          <Input
-            type="email"
-            label="Email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            error={formErrors.email}
-            placeholder="contato@devnex.com"
-          />
-          <Input
-            type="password"
-            label="Senha"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            error={formErrors.password}
-            placeholder="********"
-          />
-          {formErrors.general && (
-            <p className="text-sm text-red-500" role="alert">
-              {formErrors.general}
-            </p>
-          )}
-          <Button
-            type="submit"
-            className="w-full"
-            isLoading={isSubmitting || isBootstrapping}
-            disabled={isBootstrapping}
-          >
-            Entrar
-          </Button>
-        </form>
-      </Card>
+        <Card
+          variant="plain"
+          className="w-full max-w-[360px] md:max-w-[480px] rounded-[32px] p-8 md:p-10 bg-[#0f1d37] shadow-[0_8px_32px_rgba(0,0,0,0.35)]"
+        >
+          <div className="mb-6">
+            <h1 className="text-3xl font-semibold text-white">Login</h1>
+          </div>
+          <form className="space-y-5" onSubmit={handleSubmit}>
+            <Input
+              variant="auth"
+              type="email"
+              label="Email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              error={formErrors.email}
+              placeholder="contato@devnex.com"
+            />
+            <Input
+              variant="auth"
+              type="password"
+              label="Senha"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              error={formErrors.password}
+              placeholder="********"
+            />
+            {formErrors.general && (
+              <p className="text-sm text-red-500" role="alert">
+                {formErrors.general}
+              </p>
+            )}
+            <Button
+              variant="auth"
+              type="submit"
+              className="w-full"
+              isLoading={isSubmitting || isBootstrapping}
+              disabled={isBootstrapping}
+            >
+              Entrar
+            </Button>
+            <div className="mt-4 space-y-2 text-center">
+              <button
+                type="button"
+                className="text-white/70 text-sm hover:text-white transition"
+              >
+                Esqueci minha senha
+              </button>
+
+              <p className="text-white/70 text-sm">
+                Não tem conta?{" "}
+                <a
+                  href="#"
+                  className="text-[#fae101] font-semibold hover:text-[#ffea50] transition"
+                >
+                  Cadastre-se
+                </a>
+              </p>
+            </div>
+          </form>
+        </Card>
+      </div>
     </main>
   );
 }

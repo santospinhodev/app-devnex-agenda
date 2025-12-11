@@ -3,13 +3,43 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: light;
+  --color-brand-yellow: #fae101;
+  --color-brand-blue: #142d4b;
+  --color-brand-navy: #0f1d37;
 }
 
-body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+@layer components {
+  input[data-variant="auth"]:-webkit-autofill,
+  input[data-variant="auth"]:-webkit-autofill:hover,
+  input[data-variant="auth"]:-webkit-autofill:focus,
+  input[data-variant="auth"]:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0px 1000px #142d4b inset;
+    box-shadow: 0 0 0px 1000px #142d4b inset;
+    -webkit-text-fill-color: #fff;
+    caret-color: #fff;
+    transition: background-color 9999s ease 0s;
+  }
 }
 
-* {
-  @apply border-slate-200;
+@layer utilities {
+  /* Mobile gradient */
+  .bg-gradient-mobile {
+    background: linear-gradient(
+      to bottom,
+      #0f1d37 0%,
+      #132a46 40%,
+      #1a3d67 100%
+    );
+  }
+
+  /* Desktop gradient */
+  .bg-gradient-desktop {
+    background: linear-gradient(
+      to right,
+      #0f1d37 0%,
+      #0f1d37 40%,
+      #132a46 75%,
+      #1a3d67 100%
+    );
+  }
 }

@@ -118,9 +118,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
-      <aside className="hidden w-64 flex-col border-r border-slate-100 bg-white px-6 py-8 lg:flex">
-        <Logo size="md" />
+    <div className="flex min-h-screen bg-brand-navy">
+      <aside className="hidden w-64 flex-col border-r border-brand-yellow bg-brand-navy px-6 py-8 lg:flex">
+        <Logo size="sm" />
         <nav className="mt-8 space-y-1">
           {NAV_ITEMS.map((item) => (
             <NavEntry
@@ -133,11 +133,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         </nav>
       </aside>
       <div className="flex flex-1 flex-col">
-        <header className="sticky top-0 z-10 border-b border-slate-100 bg-white/80 backdrop-blur">
+        <header className="sticky top-0 z-10 border-b border-brand-yellow bg-brand-navy backdrop-blur">
           <div className="flex items-center justify-between px-4 py-4 lg:px-8">
             <div>
-              <p className="text-sm text-slate-500">Olá</p>
-              <p className="text-xl font-semibold text-slate-900">
+              <p className="text-sm text-white">Olá</p>
+              <p className="text-xl font-semibold text-white">
                 {user.name ?? "Barbeiro"}
               </p>
             </div>
@@ -149,7 +149,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         <main className="flex-1 overflow-y-auto px-4 py-6 lg:px-8 lg:py-8">
           {children}
         </main>
-        <nav className="sticky bottom-0 border-t border-slate-100 bg-white px-2 py-2 lg:hidden">
+        <nav className="sticky bottom-0 border-t border-white bg-brand-navy px-2 py-2 lg:hidden">
           <div className="flex items-center justify-between">
             {NAV_ITEMS.map((item) => (
               <NavEntry

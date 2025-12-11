@@ -52,12 +52,12 @@ export function DateNavigator({ value, onChange }: DateNavigatorProps) {
   };
 
   return (
-    <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-100 bg-white px-5 py-4 shadow-card">
+    <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-brand-yellow bg-brand-blue px-5 py-4 shadow-card">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-400">
+        <p className="text-xs font-semibold uppercase tracking-[0.35em] text-white">
           Agenda
         </p>
-        <p className="text-2xl font-semibold text-slate-900">{label}</p>
+        <p className="text-2xl font-semibold text-white">{label}</p>
       </div>
       <div className="flex items-center gap-3">
         <Button

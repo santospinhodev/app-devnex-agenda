@@ -8,8 +8,17 @@ const baseStyles =
 const variants = {
   primary:
     "bg-primary text-white hover:bg-primary/90 focus-visible:outline-primary",
+
   outline:
     "border border-primary text-primary hover:bg-primary/10 focus-visible:outline-primary",
+
+  auth: `
+    bg-[#fae101] 
+    text-[#0f1d37] 
+    !rounded-full
+    hover:bg-[#d8c100]
+    focus-visible:outline-[#fae101]
+  `,
 };
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
