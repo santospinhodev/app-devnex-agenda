@@ -146,10 +146,8 @@ export class ServicesService {
 
   private ensureCanManage(actor: ServicesRequestActor) {
     const allowed = new Set(actor.permissions);
-    if (!(allowed.has(Permission.ADMIN) || allowed.has(Permission.BARBER))) {
-      throw new ForbiddenException(
-        "Only admins or barbers can manage services",
-      );
+    if (!allowed.has(Permission.ADMIN)) {
+      throw new ForbiddenException("Only admins can manage services");
     }
   }
 

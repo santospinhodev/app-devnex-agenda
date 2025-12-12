@@ -41,13 +41,13 @@ export class ServicesController {
   }
 
   @Post()
-  @Permissions(Permission.ADMIN, Permission.BARBER)
+  @Permissions(Permission.ADMIN)
   create(@Req() req: AuthenticatedRequest, @Body() dto: CreateServiceDto) {
     return this.servicesService.create(req.user, dto);
   }
 
   @Patch(":id")
-  @Permissions(Permission.ADMIN, Permission.BARBER)
+  @Permissions(Permission.ADMIN)
   update(
     @Req() req: AuthenticatedRequest,
     @Param("id", new ParseUUIDPipe()) id: string,
@@ -58,7 +58,7 @@ export class ServicesController {
 
   @Delete(":id")
   @HttpCode(204)
-  @Permissions(Permission.ADMIN, Permission.BARBER)
+  @Permissions(Permission.ADMIN)
   remove(
     @Req() req: AuthenticatedRequest,
     @Param("id", new ParseUUIDPipe()) id: string,

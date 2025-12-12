@@ -38,7 +38,7 @@ export function ServicesPageClient() {
   );
 
   const canManageServices = useMemo(
-    () => permissions.has("ADMIN") || permissions.has("BARBER"),
+    () => permissions.has("ADMIN"),
     [permissions]
   );
 
