@@ -9,9 +9,15 @@ import { BarberSelector } from "@/src/components/agenda/BarberSelector";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { apiClient } from "@/src/services/apiClient";
 import { SanitizedBarberProfile } from "@/src/types/barbers";
-import { FinalTimelineEntry } from "@/src/types/agenda";
+import {
+  FinalTimelineEntry,
+  TimelineAppointmentDetails,
+} from "@/src/types/agenda";
 import { NewAppointmentModal } from "@/src/components/agenda/NewAppointmentModal";
 import { Toast } from "@/src/components/ui/Toast";
+import { AppointmentDetailsModal } from "@/src/components/agenda/AppointmentDetailsModal";
+import { FinishAppointmentModal } from "@/src/components/agenda/FinishAppointmentModal";
+import { RescheduleAppointmentModal } from "@/src/components/agenda/RescheduleAppointmentModal";
 
 const normalizeDate = (value: Date) =>
   new Date(value.getFullYear(), value.getMonth(), value.getDate());
@@ -90,6 +96,13 @@ export function DashboardPageClient() {
   );
   const [timelineRefreshKey, setTimelineRefreshKey] = useState(0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [selectedAppointmentEntry, setSelectedAppointmentEntry] =
+    useState<FinalTimelineEntry | null>(null);
+  const [finishAppointmentId, setFinishAppointmentId] = useState<string | null>(
+    null
+  );
+  const [appointmentToEdit, setAppointmentToEdit] =
+    useState<TimelineAppointmentDetails | null>(null);
 
   useEffect(() => {
     setSelectedDate(currentDateFromUrl);
@@ -205,11 +218,51 @@ export function DashboardPageClient() {
     setToastMessage("Agendamento criado com sucesso!");
   };
 
+  const refreshTimeline = (message: string) => {
+    setTimelineRefreshKey((prev) => prev + 1);
+    setToastMessage(message);
+  };
+
+  const handleSelectAppointmentEntry = (entry: FinalTimelineEntry) => {
+    setSelectedAppointmentEntry(entry);
+  };
+
+  const handleStatusUpdated = () => {
+    refreshTimeline("Status do agendamento atualizado!");
+    setSelectedAppointmentEntry(null);
+  };
+
+  const handleRequestFinish = (appointmentId: string) => {
+    setSelectedAppointmentEntry(null);
+    setFinishAppointmentId(appointmentId);
+  };
+
+  const handleFinishSuccess = () => {
+    setFinishAppointmentId(null);
+    refreshTimeline("Atendimento finalizado!");
+  };
+
+  const handleRequestEdit = (entry: FinalTimelineEntry) => {
+    if (entry.appointment) {
+      setAppointmentToEdit(entry.appointment);
+      setSelectedAppointmentEntry(null);
+    }
+  };
+
+  const handleRescheduleSuccess = () => {
+    setAppointmentToEdit(null);
+    refreshTimeline("Agendamento atualizado!");
+  };
+
   const handleToastDismiss = () => setToastMessage(null);
 
   useEffect(() => {
     setBookingSlot(null);
   }, [selectedBarberId]);
+
+  useEffect(() => {
+    setSelectedAppointmentEntry(null);
+  }, [selectedBarberId, selectedDate]);
 
   return (
     <DashboardLayout>
@@ -232,6 +285,7 @@ export function DashboardPageClient() {
           barberId={selectedBarberId}
           onSelectFreeSlot={handleSelectFreeSlot}
           refreshKey={timelineRefreshKey}
+          onSelectAppointment={handleSelectAppointmentEntry}
         />
       </div>
       {selectedBarberId && (
@@ -242,6 +296,32 @@ export function DashboardPageClient() {
           barberId={selectedBarberId}
           onClose={handleModalClose}
           onSuccess={handleAppointmentSuccess}
+        />
+      )}
+      {selectedAppointmentEntry && (
+        <AppointmentDetailsModal
+          open={Boolean(selectedAppointmentEntry)}
+          entry={selectedAppointmentEntry}
+          onClose={() => setSelectedAppointmentEntry(null)}
+          onStatusUpdated={handleStatusUpdated}
+          onRequestFinish={handleRequestFinish}
+          onRequestEdit={handleRequestEdit}
+        />
+      )}
+      {finishAppointmentId && (
+        <FinishAppointmentModal
+          open={Boolean(finishAppointmentId)}
+          appointmentId={finishAppointmentId}
+          onClose={() => setFinishAppointmentId(null)}
+          onSuccess={handleFinishSuccess}
+        />
+      )}
+      {appointmentToEdit && (
+        <RescheduleAppointmentModal
+          open={Boolean(appointmentToEdit)}
+          appointment={appointmentToEdit}
+          onClose={() => setAppointmentToEdit(null)}
+          onSuccess={handleRescheduleSuccess}
         />
       )}
       {toastMessage && (

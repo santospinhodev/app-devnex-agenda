@@ -12,6 +12,11 @@ const variants = {
   outline:
     "border border-primary text-primary hover:bg-primary/10 focus-visible:outline-primary",
 
+  secondary:
+    "bg-slate-900 text-white hover:bg-slate-800 focus-visible:outline-slate-900",
+
+  ghost: "text-slate-600 hover:bg-slate-100 focus-visible:outline-slate-400",
+
   auth: `
     bg-[#fae101] 
     text-[#0f1d37] 

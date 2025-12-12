@@ -3,12 +3,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useRouter } from "next/navigation";
+import { CalendarClock, MessageCircle } from "lucide-react";
 import { DashboardLayout } from "@/src/components/layout/DashboardLayout";
 import { useAuth } from "@/src/contexts/AuthContext";
 import { apiClient } from "@/src/services/apiClient";
 import { CustomerProfile } from "@/src/types/customers";
+import { SanitizedBarberProfile } from "@/src/types/barbers";
 import { Input } from "@/src/components/ui/Input";
 import { Button } from "@/src/components/ui/Button";
+import { Toast } from "@/src/components/ui/Toast";
+import { DateNavigator } from "@/src/components/agenda/DateNavigator";
+import { NewAppointmentModal } from "@/src/components/agenda/NewAppointmentModal";
 import { extractInitials, formatPhoneNumber } from "@/src/utils/formatters";
 
 export function ClientsPageClient() {
@@ -18,6 +23,19 @@ export function ClientsPageClient() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  });
+  const [barberOptions, setBarberOptions] = useState<SanitizedBarberProfile[]>(
+    []
+  );
+  const [barbersLoading, setBarbersLoading] = useState(false);
+  const [barbersError, setBarbersError] = useState<string | null>(null);
+  const [bookingCustomer, setBookingCustomer] =
+    useState<CustomerProfile | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
   const permissions = useMemo(
     () => new Set(user?.permissions ?? []),
     [user?.permissions]
@@ -28,6 +46,35 @@ export function ClientsPageClient() {
       permissions.has("BARBER") ||
       permissions.has("RECEPTIONIST"),
     [permissions]
+  );
+  const canSwitchBarber = useMemo(
+    () => permissions.has("ADMIN") || permissions.has("RECEPTIONIST"),
+    [permissions]
+  );
+
+  const modalBarberOptions = useMemo(
+    () =>
+      barberOptions.map((option) => ({
+        id: option.id,
+        name: option.name ?? option.user.name ?? "Sem nome",
+      })),
+    [barberOptions]
+  );
+
+  const defaultBarberId = useMemo(
+    () =>
+      canSwitchBarber
+        ? (modalBarberOptions[0]?.id ?? null)
+        : (user?.barberProfile?.id ?? null),
+    [canSwitchBarber, modalBarberOptions, user?.barberProfile?.id]
+  );
+
+  const canScheduleAppointments = useMemo(
+    () =>
+      canSwitchBarber
+        ? modalBarberOptions.length > 0
+        : Boolean(defaultBarberId),
+    [canSwitchBarber, defaultBarberId, modalBarberOptions]
   );
 
   const loadCustomers = useCallback(async () => {
@@ -49,6 +96,25 @@ export function ClientsPageClient() {
     }
   }, [canAccess, user]);
 
+  const loadBarbers = useCallback(async () => {
+    if (!canSwitchBarber) {
+      return;
+    }
+    setBarbersLoading(true);
+    setBarbersError(null);
+    try {
+      const response =
+        await apiClient.get<SanitizedBarberProfile[]>("/users/barbers");
+      setBarberOptions(response.data);
+    } catch (err) {
+      if (!axios.isCancel(err)) {
+        setBarbersError("Não foi possível carregar os barbeiros.");
+      }
+    } finally {
+      setBarbersLoading(false);
+    }
+  }, [canSwitchBarber]);
+
   useEffect(() => {
     if (!user || isBootstrapping) {
       return;
@@ -58,7 +124,18 @@ export function ClientsPageClient() {
       return;
     }
     loadCustomers();
-  }, [canAccess, isBootstrapping, loadCustomers, router, user]);
+    if (canSwitchBarber) {
+      loadBarbers();
+    }
+  }, [
+    canAccess,
+    canSwitchBarber,
+    isBootstrapping,
+    loadBarbers,
+    loadCustomers,
+    router,
+    user,
+  ]);
 
   const filteredCustomers = useMemo(() => {
     const normalizedQuery = search.trim().toLowerCase();
@@ -69,6 +146,28 @@ export function ClientsPageClient() {
       customer.name.toLowerCase().includes(normalizedQuery)
     );
   }, [customers, search]);
+
+  const handleScheduleClick = (customer: CustomerProfile) => {
+    if (!canScheduleAppointments) {
+      setToastMessage(
+        canSwitchBarber
+          ? "Cadastre pelo menos um barbeiro antes de agendar."
+          : "Vincule seu perfil de barbeiro antes de agendar."
+      );
+      return;
+    }
+    setBookingCustomer(customer);
+  };
+
+  const handleModalClose = () => setBookingCustomer(null);
+
+  const handleAppointmentSuccess = () => {
+    setBookingCustomer(null);
+    setToastMessage("Agendamento criado com sucesso!");
+    loadCustomers();
+  };
+
+  const handleToastDismiss = () => setToastMessage(null);
 
   const buildWhatsAppLink = (phone: string) => {
     const digits = phone.replace(/\D/g, "");
@@ -111,6 +210,27 @@ export function ClientsPageClient() {
           />
         </div>
 
+        <div className="mt-4 space-y-4">
+          <DateNavigator value={selectedDate} onChange={setSelectedDate} />
+          {!canSwitchBarber && user?.barberProfile && (
+            <section className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-card">
+              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-500">
+                Agendando para
+              </p>
+              <p className="text-base font-semibold text-slate-900">
+                {user.name ?? "Barbeiro"}
+              </p>
+            </section>
+          )}
+          {!canScheduleAppointments && !barbersLoading && (
+            <section className="rounded-2xl border border-dashed border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">
+              {canSwitchBarber
+                ? "Cadastre pelo menos um barbeiro para habilitar o agendamento rápido."
+                : "Vincule seu perfil de barbeiro para habilitar o agendamento rápido."}
+            </section>
+          )}
+        </div>
+
         <div className="mt-6 space-y-4">
           {isLoading ? (
             <p className="text-sm text-slate-500">Carregando clientes...</p>
@@ -151,20 +271,60 @@ export function ClientsPageClient() {
                     </p>
                   </div>
                 </div>
-                <a
-                  href={buildWhatsAppLink(customer.phone)}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label={`Conversar com ${customer.name} no WhatsApp`}
-                  className="rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-900 transition hover:bg-emerald-200"
-                >
-                  WhatsApp
-                </a>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleScheduleClick(customer)}
+                    disabled={!canScheduleAppointments}
+                    aria-label={`Agendar com ${customer.name}`}
+                    title="Agendar"
+                    className={`inline-flex h-11 w-11 items-center justify-center rounded-full border text-base transition ${
+                      canScheduleAppointments
+                        ? "border-brand-yellow bg-brand-yellow/20 text-brand-blue hover:bg-brand-yellow/30"
+                        : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                    }`}
+                  >
+                    <CalendarClock className="h-5 w-5" aria-hidden />
+                  </button>
+                  <a
+                    href={buildWhatsAppLink(customer.phone)}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={`Conversar com ${customer.name} no WhatsApp`}
+                    title="WhatsApp"
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 transition hover:bg-emerald-100"
+                  >
+                    <MessageCircle className="h-5 w-5" aria-hidden />
+                  </a>
+                </div>
               </article>
             ))
           )}
         </div>
       </div>
+
+      {bookingCustomer && (
+        <NewAppointmentModal
+          open={Boolean(bookingCustomer)}
+          slot={null}
+          date={selectedDate}
+          barberId={defaultBarberId}
+          barberOptions={canSwitchBarber ? modalBarberOptions : undefined}
+          allowBarberSelection={canSwitchBarber}
+          onClose={handleModalClose}
+          onSuccess={handleAppointmentSuccess}
+          initialCustomer={{
+            id: bookingCustomer.id,
+            name: bookingCustomer.name,
+            phone: bookingCustomer.phone,
+          }}
+          requireTimeSelection
+        />
+      )}
+
+      {toastMessage && (
+        <Toast message={toastMessage} onDismiss={handleToastDismiss} />
+      )}
     </DashboardLayout>
   );
 }

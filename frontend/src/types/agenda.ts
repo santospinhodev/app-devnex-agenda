@@ -2,7 +2,11 @@ export type TimelineSlotStatus =
   | "FREE"
   | "BLOCKED"
   | "UNAVAILABLE"
-  | "APPOINTMENT";
+  | "APPOINTMENT"
+  | "PENDING"
+  | "CONFIRMED"
+  | "DONE"
+  | "CANCELLED";
 
 export interface TimelineAppointmentDetails {
   id: string;

@@ -16,6 +16,7 @@ import { Permission } from "../../../common/enums/permission.enum";
 import { CreateAppointmentDto } from "../dto/create-appointment.dto";
 import { RescheduleAppointmentDto } from "../dto/reschedule-appointment.dto";
 import { FinishAppointmentDto } from "../dto/finish-appointment.dto";
+import { UpdateAppointmentStatusDto } from "../dto/update-appointment-status.dto";
 import { AppointmentsService } from "../services/appointments.service";
 import { AppointmentResponse } from "../types/appointment.types";
 
@@ -67,5 +68,15 @@ export class AppointmentsController {
     @Body() dto: FinishAppointmentDto,
   ): Promise<AppointmentResponse> {
     return this.appointmentsService.finishAppointment(req.user, id, dto);
+  }
+
+  @Patch(":id/status")
+  @Permissions(Permission.ADMIN, Permission.BARBER, Permission.RECEPTIONIST)
+  updateStatus(
+    @Req() req: AuthenticatedRequest,
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateAppointmentStatusDto,
+  ): Promise<AppointmentResponse> {
+    return this.appointmentsService.updateAppointmentStatus(req.user, id, dto);
   }
 }

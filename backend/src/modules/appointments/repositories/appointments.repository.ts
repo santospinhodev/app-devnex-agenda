@@ -62,11 +62,7 @@ export class AppointmentsRepository {
         startAt: { gte: start, lt: end },
         deletedAt: null,
         status: {
-          notIn: [
-            AppointmentStatus.CANCELLED,
-            AppointmentStatus.NO_SHOW,
-            AppointmentStatus.DONE,
-          ],
+          not: AppointmentStatus.CANCELLED,
         },
       },
       orderBy: { startAt: "asc" },
@@ -88,11 +84,7 @@ export class AppointmentsRepository {
           barberId: barberUserId,
           deletedAt: null,
           status: {
-            notIn: [
-              AppointmentStatus.CANCELLED,
-              AppointmentStatus.NO_SHOW,
-              AppointmentStatus.DONE,
-            ],
+            not: AppointmentStatus.CANCELLED,
           },
           startAt: { lt: end },
           endAt: { gt: start },

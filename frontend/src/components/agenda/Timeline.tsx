@@ -12,6 +12,7 @@ interface TimelineProps {
   barberId: string | null;
   onSelectFreeSlot?: (slot: FinalTimelineEntry) => void;
   refreshKey?: number;
+  onSelectAppointment?: (entry: FinalTimelineEntry) => void;
 }
 
 const formatDateParam = (date: Date) => {
@@ -38,9 +39,33 @@ const formatHumanDate = (date: Date) => {
 const STATUS_LABELS: Record<TimelineSlotStatus, string> = {
   FREE: "Disponível",
   APPOINTMENT: "Agendado",
+  PENDING: "Aguardando confirmação",
+  CONFIRMED: "Confirmado",
+  DONE: "Concluído",
+  CANCELLED: "Cancelado",
   BLOCKED: "Bloqueado",
   UNAVAILABLE: "Indisponível",
 };
+
+const APPOINTMENT_STATUS_STYLES: Record<string, string> = {
+  PENDING:
+    "border-l-4 border-l-amber-400 border border-amber-100 bg-amber-50 text-amber-900",
+  CONFIRMED:
+    "border-l-4 border-l-emerald-500 border border-emerald-100 bg-emerald-50 text-emerald-900",
+  DONE: "border-l-4 border-l-slate-400 border border-slate-200 bg-slate-50 text-slate-600",
+  CANCELLED:
+    "border-l-4 border-l-rose-400 border border-rose-100 bg-rose-50 text-rose-800",
+};
+
+const APPOINTMENT_STATUS_LABELS: Record<string, string> = {
+  PENDING: "Pendente",
+  CONFIRMED: "Confirmado",
+  DONE: "Concluído",
+  CANCELLED: "Cancelado",
+};
+
+const isBusyStatus = (status: TimelineSlotStatus) =>
+  status !== "FREE" && status !== "BLOCKED" && status !== "UNAVAILABLE";
 
 const cx = (...classes: Array<string | false | null | undefined>) =>
   classes.filter(Boolean).join(" ");
@@ -57,6 +82,7 @@ export function Timeline({
   barberId,
   onSelectFreeSlot,
   refreshKey = 0,
+  onSelectAppointment,
 }: TimelineProps) {
   const [entries, setEntries] = useState<FinalTimelineEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -120,50 +146,48 @@ export function Timeline({
   const handleRetry = () => fetchTimeline();
 
   const renderSlot = (entry: FinalTimelineEntry, index: number) => {
-    const baseKey = `${entry.time}-${entry.status}-${entry.appointment?.id ?? index}`;
-    const isFree = entry.status === "FREE";
-    const isAppointment = entry.status === "APPOINTMENT" && entry.appointment;
-    const slotClasses = cx(
-      "flex items-stretch gap-4 rounded-2xl border px-4 py-3",
-      isFree &&
-        "min-h-[52px] cursor-pointer border-dashed border-slate-200 bg-white text-slate-600 hover:border-brand-yellow hover:bg-brand-yellow/10",
-      entry.status === "APPOINTMENT" &&
-        "border border-primary/20 border-l-4 border-l-primary bg-primary/10",
-      entry.status === "BLOCKED" && "border-slate-200 bg-stripe text-slate-600",
-      entry.status === "UNAVAILABLE" &&
-        "border-slate-200 bg-slate-50 text-slate-500",
-      !isFree && "text-slate-800"
-    );
+    const slotStatus = entry.status;
+    const baseKey = `${entry.time}-${slotStatus}-${entry.appointment?.id ?? index}`;
+    const hasAppointment = Boolean(entry.appointment);
+    const busySlot = isBusyStatus(slotStatus);
 
-    const handleClick = () => {
-      if (isFree) {
-        onSelectFreeSlot?.(entry);
-      }
-    };
+    if (hasAppointment) {
+      const appointmentStatus =
+        entry.appointment?.status ??
+        (slotStatus === "PENDING" ? "PENDING" : "CONFIRMED");
+      const appointmentClasses = cx(
+        "relative z-10 flex items-stretch gap-4 rounded-2xl border px-4 py-3 shadow-[0_12px_30px_rgba(15,23,42,0.08)]",
+        APPOINTMENT_STATUS_STYLES[appointmentStatus] ??
+          APPOINTMENT_STATUS_STYLES.CONFIRMED,
+        "cursor-pointer"
+      );
+      const label =
+        APPOINTMENT_STATUS_LABELS[appointmentStatus] ??
+        STATUS_LABELS.APPOINTMENT;
 
-    return (
-      <div
-        key={baseKey}
-        className={slotClasses}
-        role={isFree ? "button" : undefined}
-        tabIndex={isFree ? 0 : undefined}
-        onClick={handleClick}
-        onKeyUp={(event) => {
-          if (!isFree) return;
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            onSelectFreeSlot?.(entry);
-          }
-        }}
-      >
-        <div className="w-16 shrink-0 text-sm font-semibold text-slate-500">
-          {entry.time}
-        </div>
-        <div className="flex-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-            {STATUS_LABELS[entry.status]}
-          </p>
-          {isAppointment ? (
+      const handleAppointmentClick = () => onSelectAppointment?.(entry);
+
+      return (
+        <div
+          key={baseKey}
+          className={appointmentClasses}
+          role="button"
+          tabIndex={0}
+          onClick={handleAppointmentClick}
+          onKeyUp={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              handleAppointmentClick();
+            }
+          }}
+        >
+          <div className="w-16 shrink-0 text-sm font-semibold text-slate-500">
+            {entry.time}
+          </div>
+          <div className="flex-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              {label}
+            </p>
             <div className="mt-1 space-y-1">
               <p className="text-base font-semibold text-slate-900">
                 {entry.appointment!.customer.name ?? "Cliente sem nome"}
@@ -173,15 +197,90 @@ export function Timeline({
                 {entry.appointment!.service.durationMin} min
               </p>
             </div>
-          ) : (
-            <p className="mt-1 text-sm text-slate-600">
-              {entry.status === "BLOCKED"
-                ? getBlockCopy(entry)
-                : entry.status === "UNAVAILABLE"
-                  ? "Fora da disponibilidade"
-                  : "Toque para criar um agendamento"}
+          </div>
+        </div>
+      );
+    }
+
+    if (busySlot && !hasAppointment) {
+      const fallbackLabel = STATUS_LABELS[slotStatus] ?? STATUS_LABELS.PENDING;
+      return (
+        <div
+          key={baseKey}
+          className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-600">
+            {fallbackLabel}
+          </p>
+          <p className="mt-1">
+            Horário reservado. Atualize a página para ver os detalhes.
+          </p>
+        </div>
+      );
+    }
+
+    if (slotStatus === "BLOCKED") {
+      return (
+        <div
+          key={baseKey}
+          className="flex items-stretch gap-4 rounded-2xl border border-slate-200 bg-stripe px-4 py-3 text-slate-600"
+        >
+          <div className="w-16 shrink-0 text-sm font-semibold text-slate-500">
+            {entry.time}
+          </div>
+          <div className="flex-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+              {STATUS_LABELS.BLOCKED}
             </p>
-          )}
+            <p className="mt-1 text-sm">{getBlockCopy(entry)}</p>
+          </div>
+        </div>
+      );
+    }
+
+    if (slotStatus === "UNAVAILABLE") {
+      return (
+        <div
+          key={baseKey}
+          className="flex items-stretch gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-500"
+        >
+          <div className="w-16 shrink-0 text-sm font-semibold text-slate-500">
+            {entry.time}
+          </div>
+          <div className="flex-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+              {STATUS_LABELS.UNAVAILABLE}
+            </p>
+            <p className="mt-1 text-sm">Fora da disponibilidade padrão.</p>
+          </div>
+        </div>
+      );
+    }
+
+    const handleCreate = () => onSelectFreeSlot?.(entry);
+
+    return (
+      <div
+        key={baseKey}
+        className="flex items-stretch gap-4 rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-3 text-slate-600 transition hover:border-brand-yellow hover:bg-brand-yellow/10"
+        role="button"
+        tabIndex={0}
+        onClick={handleCreate}
+        onKeyUp={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            handleCreate();
+          }
+        }}
+      >
+        <div className="w-16 shrink-0 text-sm font-semibold text-slate-500">
+          {entry.time}
+        </div>
+        <div className="flex-1">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+            {STATUS_LABELS.FREE}
+          </p>
+          <p className="mt-1 text-sm">Toque para criar um agendamento</p>
         </div>
       </div>
     );
@@ -192,14 +291,14 @@ export function Timeline({
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-6 py-4">
         <div>
           <p className="text-xs uppercase tracking-[0.35em] text-slate-400">
-            Timeline
+            Linha do tempo
           </p>
           <p className="text-lg font-semibold text-slate-900">
             {humanReadableDate}
           </p>
         </div>
         <div className="flex items-center gap-3 text-sm text-slate-500">
-          <span>{entries.length} slots</span>
+          <span>{entries.length} horários</span>
           <Button type="button" variant="outline" onClick={handleRetry}>
             Atualizar
           </Button>

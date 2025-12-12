@@ -8,16 +8,35 @@ import { Button } from "@/src/components/ui/Button";
 import { apiClient } from "@/src/services/apiClient";
 import { FinalTimelineEntry } from "@/src/types/agenda";
 import { BarbershopServiceItem } from "@/src/types/services";
-import { formatCurrency, formatDuration } from "@/src/utils/formatters";
+import {
+  formatCurrency,
+  formatDuration,
+  formatPhoneNumber,
+} from "@/src/utils/formatters";
 
-interface NewAppointmentModalProps {
+type PrefilledCustomer = {
+  id?: string;
+  name: string;
+  phone: string;
+};
+
+type BarberOption = {
+  id: string;
+  name: string;
+};
+
+type NewAppointmentModalProps = {
   open: boolean;
   slot: FinalTimelineEntry | null;
   date: Date;
-  barberId: string;
+  barberId: string | null;
   onClose: () => void;
   onSuccess: () => void;
-}
+  initialCustomer?: PrefilledCustomer;
+  requireTimeSelection?: boolean;
+  barberOptions?: BarberOption[];
+  allowBarberSelection?: boolean;
+};
 
 const formatDateForPayload = (value: Date) => {
   const normalized = new Date(
@@ -54,6 +73,10 @@ export function NewAppointmentModal({
   barberId,
   onClose,
   onSuccess,
+  initialCustomer,
+  requireTimeSelection = false,
+  barberOptions,
+  allowBarberSelection = false,
 }: NewAppointmentModalProps) {
   const [form, setForm] = useState(INITIAL_FORM);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -61,13 +84,27 @@ export function NewAppointmentModal({
   const [services, setServices] = useState<BarbershopServiceItem[]>([]);
   const [isLoadingServices, setIsLoadingServices] = useState(false);
   const [servicesError, setServicesError] = useState<string | null>(null);
+  const [manualTime, setManualTime] = useState("");
+  const [selectedBarberId, setSelectedBarberId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) {
       setForm(INITIAL_FORM);
       setError(null);
+      setManualTime("");
+      setSelectedBarberId(null);
     }
   }, [open]);
+
+  useEffect(() => {
+    if (!open || !allowBarberSelection) {
+      return;
+    }
+    const fallbackId =
+      barberId ??
+      (barberOptions && barberOptions.length > 0 ? barberOptions[0].id : null);
+    setSelectedBarberId(fallbackId);
+  }, [allowBarberSelection, barberId, barberOptions, open]);
 
   useEffect(() => {
     if (!open) {
@@ -97,7 +134,10 @@ export function NewAppointmentModal({
   }, [open]);
 
   const readableDate = useMemo(() => formatHumanDate(date), [date]);
-  const slotTime = slot?.time ?? "--:--";
+  const hasPrefilledCustomer = Boolean(initialCustomer);
+  const effectiveTime = slot?.time ?? manualTime;
+  const slotTime = effectiveTime || "--:--";
+  const effectiveBarberId = allowBarberSelection ? selectedBarberId : barberId;
   const selectedService = useMemo(
     () => services.find((service) => service.id === form.serviceId) ?? null,
     [form.serviceId, services]
@@ -109,7 +149,15 @@ export function NewAppointmentModal({
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!slot) {
+
+    if (!effectiveBarberId) {
+      setError("Selecione um barbeiro antes de agendar.");
+      return;
+    }
+
+    const resolvedTime = slot?.time ?? manualTime.trim();
+    if (!resolvedTime) {
+      setError("Informe um horário válido.");
       return;
     }
 
@@ -117,17 +165,24 @@ export function NewAppointmentModal({
     setError(null);
 
     try {
-      await apiClient.post("/agendamentos", {
-        barberId,
+      const payload: Record<string, unknown> = {
+        barberId: effectiveBarberId,
         serviceId: form.serviceId.trim(),
         date: formatDateForPayload(date),
-        time: slot.time,
-        customer: {
-          name: form.customerName.trim(),
-          phone: form.customerPhone.trim(),
-        },
+        time: resolvedTime,
         notes: form.notes.trim() || undefined,
-      });
+      };
+
+      if (initialCustomer?.id) {
+        payload.customerId = initialCustomer.id;
+      } else {
+        payload.customer = {
+          name: initialCustomer?.name ?? form.customerName.trim(),
+          phone: initialCustomer?.phone ?? form.customerPhone.trim(),
+        };
+      }
+
+      await apiClient.post("/agendamentos", payload);
       onSuccess();
     } catch (err) {
       if (axios.isAxiosError(err)) {
@@ -147,17 +202,14 @@ export function NewAppointmentModal({
   };
 
   const isSubmitDisabled =
-    !form.customerName.trim() ||
-    !form.customerPhone.trim() ||
     !form.serviceId.trim() ||
-    !slot;
+    !effectiveTime ||
+    !effectiveBarberId ||
+    (!hasPrefilledCustomer &&
+      (!form.customerName.trim() || !form.customerPhone.trim()));
 
   return (
-    <Modal
-      open={open && Boolean(slot)}
-      onClose={onClose}
-      title="Novo agendamento"
-    >
+    <Modal open={open} onClose={onClose} title="Novo agendamento">
       <div className="space-y-4">
         <div className="rounded-2xl bg-brand-blue px-4 py-3 text-white">
           <p className="text-xs uppercase tracking-[0.35em] text-white/60">
@@ -167,25 +219,79 @@ export function NewAppointmentModal({
           <p className="text-sm text-white/80">{readableDate}</p>
         </div>
         <form className="space-y-4" onSubmit={handleSubmit}>
-          <Input
-            label="Telefone do cliente"
-            type="tel"
-            value={form.customerPhone}
-            onChange={(event) =>
-              handleChange("customerPhone", event.target.value)
-            }
-            placeholder="(11) 99999-9999"
-            required
-          />
-          <Input
-            label="Nome do cliente"
-            value={form.customerName}
-            onChange={(event) =>
-              handleChange("customerName", event.target.value)
-            }
-            placeholder="João da Silva"
-            required
-          />
+          {hasPrefilledCustomer ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                Cliente selecionado
+              </p>
+              <p className="text-base font-semibold text-slate-900">
+                {initialCustomer?.name}
+              </p>
+              <p className="text-sm text-slate-600">
+                {formatPhoneNumber(initialCustomer?.phone ?? "")}
+              </p>
+            </div>
+          ) : (
+            <>
+              <Input
+                label="Telefone do cliente"
+                type="tel"
+                value={form.customerPhone}
+                onChange={(event) =>
+                  handleChange("customerPhone", event.target.value)
+                }
+                placeholder="(11) 99999-9999"
+                required
+              />
+              <Input
+                label="Nome do cliente"
+                value={form.customerName}
+                onChange={(event) =>
+                  handleChange("customerName", event.target.value)
+                }
+                placeholder="João da Silva"
+                required
+              />
+            </>
+          )}
+
+          {allowBarberSelection && (
+            <div>
+              <label className="text-sm font-medium text-slate-700">
+                Barbeiro responsável
+              </label>
+              <div className="mt-1 rounded-2xl border border-slate-200 bg-white px-3 py-1 focus-within:border-brand-yellow focus-within:ring-2 focus-within:ring-brand-yellow/30">
+                <select
+                  className="h-11 w-full bg-transparent text-sm text-slate-900 outline-none"
+                  value={selectedBarberId ?? ""}
+                  onChange={(event) =>
+                    setSelectedBarberId(
+                      event.target.value ? event.target.value : null
+                    )
+                  }
+                  disabled={!barberOptions || barberOptions.length === 0}
+                  required
+                >
+                  <option value="">Selecione um barbeiro</option>
+                  {barberOptions?.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
+          {requireTimeSelection && (
+            <Input
+              label="Horário (HH:MM)"
+              type="time"
+              value={manualTime}
+              onChange={(event) => setManualTime(event.target.value)}
+              required
+            />
+          )}
           <div>
             <label className="text-sm font-medium text-slate-700">
               Serviço

@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { AppointmentStatus, Prisma } from "@prisma/client";
+import { DateTime } from "luxon";
 import { PrismaService } from "../../../database/prisma.service";
 import { Permission } from "../../../common/enums/permission.enum";
 import {
@@ -14,6 +15,7 @@ import {
   BarberAvailabilityService,
   RequestActor,
 } from "../../agenda/barber-availability/services/barber-availability.service";
+import { DEFAULT_BARBERSHOP_TIMEZONE } from "../../agenda/constants/timezone.constants";
 import { timeStringToMinutes } from "../../agenda/utils/time.utils";
 import { UsersRepository } from "../../users/repositories/users.repository";
 import { UserWithRelations } from "../../users/types/user-with-relations.type";
@@ -25,6 +27,7 @@ import {
   CreateAppointmentDto,
 } from "../dto/create-appointment.dto";
 import { RescheduleAppointmentDto } from "../dto/reschedule-appointment.dto";
+import { UpdateAppointmentStatusDto } from "../dto/update-appointment-status.dto";
 import {
   AppointmentsRepository,
   AppointmentWithRelations,
@@ -103,10 +106,13 @@ export class AppointmentsService {
       throw new BadRequestException("Service duration is invalid");
     }
 
+    const timeZone = await this.resolveBarbershopTimezone(profile.barbershopId);
+
     const appointmentWindow = this.resolveAppointmentWindow(
       dto.date,
       dto.time,
       service.durationMin,
+      timeZone,
     );
 
     await this.assertWithinAvailability(
@@ -153,7 +159,7 @@ export class AppointmentsService {
           service: { connect: { id: service.id } },
           startAt: appointmentWindow.startAt,
           endAt: appointmentWindow.endAt,
-          status: AppointmentStatus.CONFIRMED,
+          status: AppointmentStatus.PENDING,
           price: service.price,
           notes,
         },
@@ -163,7 +169,9 @@ export class AppointmentsService {
       return this.mapAppointment(record);
     });
 
-    await this.notifyAppointmentConfirmation(appointment, barbershopName);
+    if (appointment.status === AppointmentStatus.CONFIRMED) {
+      await this.notifyAppointmentConfirmation(appointment, barbershopName);
+    }
     return this.serializeAppointment(appointment);
   }
 
@@ -200,10 +208,13 @@ export class AppointmentsService {
 
     this.assertAppointmentIsActive(appointment, "reschedule");
 
+    const timeZone = await this.resolveBarbershopTimezone(profile.barbershopId);
+
     const appointmentWindow = this.resolveAppointmentWindow(
       dto.date,
       dto.time,
       appointment.service.durationMin,
+      timeZone,
     );
 
     await this.assertWithinAvailability(
@@ -247,6 +258,52 @@ export class AppointmentsService {
     });
 
     return this.serializeAppointment(updated);
+  }
+
+  async updateAppointmentStatus(
+    actor: RequestActor,
+    appointmentId: string,
+    dto: UpdateAppointmentStatusDto,
+  ): Promise<AppointmentResponse> {
+    const { appointment, profile } = await this.getAuthorizedAppointment(
+      actor,
+      appointmentId,
+    );
+
+    this.assertStatusUpdatePermissions(actor, appointment);
+
+    if (appointment.status === dto.status) {
+      return this.serializeAppointment(this.mapAppointment(appointment));
+    }
+
+    if (appointment.status !== AppointmentStatus.PENDING) {
+      throw new BadRequestException(
+        "Only pending appointments can change status",
+      );
+    }
+
+    if (dto.status !== AppointmentStatus.CONFIRMED) {
+      throw new BadRequestException("Unsupported status transition");
+    }
+
+    const updated = await this.appointmentsRepository.updateAppointment(
+      appointment.id,
+      { status: dto.status },
+    );
+
+    const barbershop = await this.prisma.barbershop.findUnique({
+      where: { id: profile.barbershopId },
+      select: { name: true },
+    });
+
+    const mapped = this.mapAppointment(updated);
+
+    await this.notifyAppointmentConfirmation(
+      mapped,
+      barbershop?.name ?? "Sua barbearia",
+    );
+
+    return this.serializeAppointment(mapped);
   }
 
   async finishAppointment(
@@ -358,6 +415,30 @@ export class AppointmentsService {
     );
   }
 
+  private assertStatusUpdatePermissions(
+    actor: RequestActor,
+    appointment: AppointmentWithRelations,
+  ) {
+    const permissions = new Set(actor.permissions);
+    if (
+      permissions.has(Permission.ADMIN) ||
+      permissions.has(Permission.RECEPTIONIST)
+    ) {
+      return;
+    }
+
+    if (
+      permissions.has(Permission.BARBER) &&
+      actor.userId === appointment.barber.id
+    ) {
+      return;
+    }
+
+    throw new ForbiddenException(
+      "You do not have permission to change this appointment status",
+    );
+  }
+
   private async getAuthorizedAppointment(
     actor: RequestActor,
     appointmentId: string,
@@ -418,36 +499,51 @@ export class AppointmentsService {
     dateStr: string,
     timeStr: string,
     durationMin: number,
+    timeZone: string,
   ) {
-    const dateMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (!dateMatch) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
       throw new BadRequestException("Invalid date format");
     }
 
-    const year = Number(dateMatch[1]);
-    const month = Number(dateMatch[2]);
-    const day = Number(dateMatch[3]);
+    if (!/^\d{2}:\d{2}$/.test(timeStr)) {
+      throw new BadRequestException("Invalid time format");
+    }
 
-    const [hoursStr, minutesStr] = timeStr.split(":");
-    const hours = Number(hoursStr);
-    const minutes = Number(minutesStr);
+    const startDate = DateTime.fromISO(`${dateStr}T${timeStr}`, {
+      zone: timeZone,
+    });
 
-    const startAt = new Date(Date.UTC(year, month - 1, day, hours, minutes));
-    if (Number.isNaN(startAt.getTime())) {
+    if (!startDate.isValid) {
       throw new BadRequestException("Invalid start time");
     }
 
-    const endAt = new Date(startAt.getTime() + durationMin * 60000);
-    const startMinutes = hours * 60 + minutes;
+    const endDate = startDate.plus({ minutes: durationMin });
+    const startMinutes = startDate.hour * 60 + startDate.minute;
     const endMinutes = startMinutes + durationMin;
 
     return {
-      startAt,
-      endAt,
+      startAt: startDate.toUTC().toJSDate(),
+      endAt: endDate.toUTC().toJSDate(),
       startMinutes,
       endMinutes,
-      dayOfWeek: startAt.getUTCDay(),
+      dayOfWeek: startDate.weekday % 7,
     };
+  }
+
+  private async resolveBarbershopTimezone(barbershopId: string) {
+    const barbershop = await this.prisma.barbershop.findUnique({
+      where: { id: barbershopId },
+      select: { id: true },
+    });
+
+    if (!barbershop) {
+      throw new NotFoundException("Barbershop not found");
+    }
+
+    return (
+      (barbershop as unknown as { timezone?: string | null }).timezone ??
+      DEFAULT_BARBERSHOP_TIMEZONE
+    );
   }
 
   private async assertWithinAvailability(

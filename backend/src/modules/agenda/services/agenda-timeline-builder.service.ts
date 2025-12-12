@@ -8,6 +8,7 @@ import { DateTime } from "luxon";
 import { PrismaService } from "../../../database/prisma.service";
 import { AppointmentWithMeta } from "../../appointments/types/appointment.types";
 import { AppointmentsService } from "../../appointments/services/appointments.service";
+import { DEFAULT_BARBERSHOP_TIMEZONE } from "../constants/timezone.constants";
 import {
   AuthorizedBarberProfile,
   BarberAvailabilityService,
@@ -48,7 +49,6 @@ interface TimelineAppointmentWindow {
 export class AgendaTimelineBuilderService {
   private static readonly MINUTES_PER_DAY = 24 * 60;
   private static readonly DEFAULT_INTERVAL = 30;
-  private static readonly DEFAULT_TIMEZONE = "America/Sao_Paulo";
 
   constructor(
     private readonly prisma: PrismaService,
@@ -166,7 +166,7 @@ export class AgendaTimelineBuilderService {
 
     const inferredTimezone =
       (barbershop as unknown as { timezone?: string | null }).timezone ??
-      AgendaTimelineBuilderService.DEFAULT_TIMEZONE;
+      DEFAULT_BARBERSHOP_TIMEZONE;
 
     return {
       profile,
