@@ -150,7 +150,7 @@ export function AvailabilityEditor({ barberId }: AvailabilityEditorProps) {
 
     const slotIntervalNumber = Number(day.slotInterval);
     if (!Number.isFinite(slotIntervalNumber) || slotIntervalNumber <= 0) {
-      return `Informe um tempo de slot válido para ${day.label}.`;
+      return `Informe um intervalo válido para ${day.label}.`;
     }
 
     return null;
@@ -343,7 +343,7 @@ export function AvailabilityEditor({ barberId }: AvailabilityEditorProps) {
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                        Tempo de slot (min)
+                        Intervalo entre atendimentos (min)
                       </label>
                       <input
                         type="number"

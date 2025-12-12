@@ -40,7 +40,7 @@ export default function LoginPage() {
     try {
       await signIn({ email, password });
     } catch (error) {
-      setFormErrors({ general: "Credenciais invalidas. Tente novamente." });
+      setFormErrors({ general: "Credenciais inválidas. Tente novamente." });
     } finally {
       setIsSubmitting(false);
     }
@@ -60,7 +60,9 @@ export default function LoginPage() {
           className="w-full max-w-[360px] md:max-w-[480px] rounded-[32px] p-8 md:p-10 bg-[#0f1d37] shadow-[0_8px_32px_rgba(0,0,0,0.35)]"
         >
           <div className="mb-6">
-            <h1 className="text-3xl font-semibold text-white">Login</h1>
+            <h1 className="text-3xl font-semibold text-white">
+              Entrar no painel
+            </h1>
           </div>
           <form className="space-y-5" onSubmit={handleSubmit}>
             <Input

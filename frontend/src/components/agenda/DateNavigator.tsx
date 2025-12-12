@@ -103,7 +103,7 @@ export function DateNavigator({ value, onChange }: DateNavigatorProps) {
           </button>
         </div>
         <p className="text-sm text-white/80">
-          Navegue pelos dias para ajustar a timeline.
+          Navegue pelos dias para ajustar a linha do tempo.
         </p>
       </div>
       {isOpen && (

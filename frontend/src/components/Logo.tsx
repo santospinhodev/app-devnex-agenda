@@ -24,6 +24,8 @@ export function Logo({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
         alt="Devnex Solutions"
         width={sizePixels[size]}
         height={sizePixels[size]}
+        className="h-auto w-auto"
+        style={{ height: "auto", width: "auto" }}
         priority
       />
     </div>
