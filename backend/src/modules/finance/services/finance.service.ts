@@ -43,6 +43,10 @@ export interface DailyCashSummary {
 }
 
 export interface BarberBalanceSummary {
+  month: string;
+  grossTotal: string;
+  commissionPercentage: number;
+  projectedCommission: string;
   pendingTotal: string;
   paidTotal: string;
   commissions: Array<{
@@ -204,19 +208,43 @@ export class FinanceService {
 
   async getBarberBalance(
     actor: BarbershopRequestActor,
+    month?: string,
   ): Promise<BarberBalanceSummary> {
     const permissions = new Set(actor.permissions);
     if (!permissions.has(Permission.BARBER)) {
       throw new ForbiddenException("Only barbers can access this summary");
     }
 
+    const profile = await this.prisma.barberProfile.findUnique({
+      where: { userId: actor.userId },
+      select: {
+        barbershopId: true,
+        commissionPercentage: true,
+      },
+    });
+
+    if (!profile) {
+      throw new NotFoundException("Barber profile not found");
+    }
+
+    const { start, end, label } = this.resolveMonthRange(month);
+
     const commissions = await this.prisma.commission.findMany({
-      where: { barberId: actor.userId },
+      where: {
+        barberId: actor.userId,
+        appointment: {
+          startAt: {
+            gte: start,
+            lt: end,
+          },
+        },
+      },
       include: {
         appointment: {
           select: {
             id: true,
             startAt: true,
+            price: true,
             service: {
               select: {
                 name: true,
@@ -228,6 +256,20 @@ export class FinanceService {
       orderBy: { createdAt: "desc" },
     });
 
+    const grossTotal = commissions.reduce((acc, entry) => {
+      if (entry.appointment?.price) {
+        return acc.add(entry.appointment.price);
+      }
+      return acc;
+    }, new Prisma.Decimal(0));
+
+    const commissionRate =
+      profile.commissionPercentage === null ? 50 : profile.commissionPercentage;
+
+    const projectedCommission = grossTotal
+      .mul(new Prisma.Decimal(commissionRate))
+      .div(100);
+
     const pending = this.sumAmounts(
       commissions.filter((entry) => entry.status === CommissionStatus.PENDING),
     );
@@ -236,6 +278,10 @@ export class FinanceService {
     );
 
     return {
+      month: label,
+      grossTotal: grossTotal.toString(),
+      commissionPercentage: commissionRate,
+      projectedCommission: projectedCommission.toString(),
       pendingTotal: pending.toString(),
       paidTotal: paid.toString(),
       commissions: commissions.map((entry) => ({

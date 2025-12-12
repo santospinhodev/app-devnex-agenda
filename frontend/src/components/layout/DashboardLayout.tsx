@@ -55,7 +55,11 @@ const buildManagementNav = (permissions: Set<string>): NavItem[] => {
     items.push({ label: "Clientes", href: "/clients", icon: Users });
   }
 
-  if (permissions.has("ADMIN") || permissions.has("RECEPTIONIST")) {
+  if (
+    permissions.has("ADMIN") ||
+    permissions.has("RECEPTIONIST") ||
+    permissions.has("BARBER")
+  ) {
     items.push({ label: "Financeiro", href: "/finance", icon: Wallet });
   }
 

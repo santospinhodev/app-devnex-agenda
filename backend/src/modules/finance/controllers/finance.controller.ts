@@ -16,6 +16,7 @@ import { FinanceService } from "../services/finance.service";
 import { GetDailyCashQueryDto } from "../dto/get-daily-cash-query.dto";
 import { CreateManualTransactionDto } from "../dto/create-manual-transaction.dto";
 import { GetMonthlyCashQueryDto } from "../dto/get-monthly-cash-query.dto";
+import { GetBarberBalanceQueryDto } from "../dto/get-barber-balance-query.dto";
 
 interface AuthenticatedRequest extends Request {
   user: {
@@ -58,7 +59,10 @@ export class FinanceController {
 
   @Get("balance")
   @Permissions(Permission.BARBER)
-  getBarberBalance(@Req() req: AuthenticatedRequest) {
-    return this.financeService.getBarberBalance(req.user);
+  getBarberBalance(
+    @Req() req: AuthenticatedRequest,
+    @Query() query: GetBarberBalanceQueryDto,
+  ) {
+    return this.financeService.getBarberBalance(req.user, query.month);
   }
 }
