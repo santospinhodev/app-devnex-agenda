@@ -44,7 +44,7 @@ export class ReceptionistsService {
     private readonly prisma: PrismaService,
     private readonly usersService: UsersService,
     private readonly barbershopService: BarbershopService,
-    private readonly userProfilesRepository: UserProfilesRepository
+    private readonly userProfilesRepository: UserProfilesRepository,
   ) {}
 
   async listForOwner(ownerId: string): Promise<SanitizedReceptionistProfile[]> {
@@ -57,7 +57,7 @@ export class ReceptionistsService {
 
     const receptionists =
       await this.userProfilesRepository.findReceptionistsByBarbershop(
-        barbershop.id
+        barbershop.id,
       );
 
     return receptionists.map((profile) => this.sanitize(profile));
@@ -65,7 +65,7 @@ export class ReceptionistsService {
 
   async createReceptionist(
     ownerId: string,
-    dto: CreateReceptionistDto
+    dto: CreateReceptionistDto,
   ): Promise<SanitizedReceptionistProfile> {
     const barbershop =
       await this.barbershopService.getBarbershopForOwner(ownerId);
@@ -81,7 +81,7 @@ export class ReceptionistsService {
 
     const hashedPassword = await bcrypt.hash(
       dto.password,
-      ReceptionistsService.PASSWORD_SALT_ROUNDS
+      ReceptionistsService.PASSWORD_SALT_ROUNDS,
     );
 
     let profile: ReceptionistProfileWithUser | null = null;
@@ -94,13 +94,13 @@ export class ReceptionistsService {
           phone: dto.phone,
           hashedPassword,
         },
-        tx
+        tx,
       );
 
       await this.usersService.assignPermissions(
         user.id,
         [Permission.RECEPTIONIST],
-        tx
+        tx,
       );
 
       profile = await this.userProfilesRepository.createReceptionistProfile(
@@ -116,7 +116,7 @@ export class ReceptionistsService {
           avatarUrl: dto.avatarUrl,
           isActive: dto.isActive ?? true,
         },
-        tx
+        tx,
       );
     });
 
@@ -130,7 +130,7 @@ export class ReceptionistsService {
   async updateReceptionist(
     ownerId: string,
     profileId: string,
-    dto: UpdateReceptionistDto
+    dto: UpdateReceptionistDto,
   ): Promise<SanitizedReceptionistProfile> {
     const barbershop =
       await this.barbershopService.getBarbershopForOwner(ownerId);
@@ -144,7 +144,7 @@ export class ReceptionistsService {
 
     if (!profile || profile.barbershopId !== barbershop.id) {
       throw new ForbiddenException(
-        "Receptionist not associated with your barbershop"
+        "Receptionist not associated with your barbershop",
       );
     }
 
@@ -168,8 +168,11 @@ export class ReceptionistsService {
     if (dto.password !== undefined) {
       userData.hashedPassword = await bcrypt.hash(
         dto.password,
-        ReceptionistsService.PASSWORD_SALT_ROUNDS
+        ReceptionistsService.PASSWORD_SALT_ROUNDS,
       );
+    }
+    if (dto.isActive !== undefined) {
+      userData.isActive = dto.isActive;
     }
 
     const profileData: Prisma.ReceptionistProfileUpdateInput = {};
@@ -198,7 +201,7 @@ export class ReceptionistsService {
           await this.userProfilesRepository.updateReceptionistProfile(
             profileId,
             profileData,
-            tx
+            tx,
           );
       }
     });
@@ -208,7 +211,7 @@ export class ReceptionistsService {
         await this.userProfilesRepository.findReceptionistById(profileId);
       if (!reloaded) {
         throw new NotFoundException(
-          "Receptionist profile not found after update"
+          "Receptionist profile not found after update",
         );
       }
       updatedProfile = reloaded;
@@ -218,7 +221,7 @@ export class ReceptionistsService {
   }
 
   private sanitize(
-    profile: ReceptionistProfileWithUser
+    profile: ReceptionistProfileWithUser,
   ): SanitizedReceptionistProfile {
     return {
       id: profile.id,
@@ -232,7 +235,7 @@ export class ReceptionistsService {
         name: profile.user.name,
         phone: profile.user.phone,
         permissions: profile.user.permissions.map(
-          ({ permission }) => permission.name as Permission
+          ({ permission }) => permission.name as Permission,
         ),
       },
       barbershop: {

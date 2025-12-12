@@ -54,22 +54,22 @@ export class BarbersService {
     private readonly prisma: PrismaService,
     private readonly usersService: UsersService,
     private readonly barbershopService: BarbershopService,
-    private readonly userProfilesRepository: UserProfilesRepository
+    private readonly userProfilesRepository: UserProfilesRepository,
   ) {}
 
   async listForActor(actor: RequestActor): Promise<SanitizedBarberProfile[]> {
     if (
       !actor.permissions.some((permission) =>
-        [Permission.ADMIN, Permission.RECEPTIONIST].includes(permission)
+        [Permission.ADMIN, Permission.RECEPTIONIST].includes(permission),
       )
     ) {
       throw new ForbiddenException(
-        "You do not have permission to list barber profiles"
+        "You do not have permission to list barber profiles",
       );
     }
 
     const barbershop = await this.barbershopService.getBarbershopForActor(
-      actor as BarbershopRequestActor
+      actor as BarbershopRequestActor,
     );
 
     if (!barbershop) {
@@ -77,7 +77,7 @@ export class BarbersService {
     }
 
     const profiles = await this.userProfilesRepository.findBarbersByBarbershop(
-      barbershop.id
+      barbershop.id,
     );
 
     return profiles.map((profile) => this.sanitize(profile));
@@ -85,7 +85,7 @@ export class BarbersService {
 
   async getById(
     actor: RequestActor,
-    profileId: string
+    profileId: string,
   ): Promise<SanitizedBarberProfile> {
     const profile = await this.userProfilesRepository.findBarberById(profileId);
 
@@ -94,7 +94,7 @@ export class BarbersService {
     }
 
     const barbershop = await this.barbershopService.getBarbershopForActor(
-      actor as BarbershopRequestActor
+      actor as BarbershopRequestActor,
     );
 
     if (!barbershop || !this.canAccessProfile(actor, barbershop.id, profile)) {
@@ -106,7 +106,7 @@ export class BarbersService {
 
   async createBarber(
     ownerId: string,
-    dto: CreateBarberProfileDto
+    dto: CreateBarberProfileDto,
   ): Promise<SanitizedBarberProfile> {
     const barbershop =
       await this.barbershopService.getBarbershopForOwner(ownerId);
@@ -122,7 +122,7 @@ export class BarbersService {
 
     const hashedPassword = await bcrypt.hash(
       dto.password,
-      BarbersService.PASSWORD_SALT_ROUNDS
+      BarbersService.PASSWORD_SALT_ROUNDS,
     );
 
     let createdProfile: BarberProfileWithUser | null = null;
@@ -135,13 +135,13 @@ export class BarbersService {
           phone: dto.phone,
           hashedPassword,
         },
-        tx
+        tx,
       );
 
       await this.usersService.assignPermissions(
         user.id,
         [Permission.BARBER],
-        tx
+        tx,
       );
 
       createdProfile = await this.userProfilesRepository.createBarberProfile(
@@ -159,7 +159,7 @@ export class BarbersService {
           commissionPercentage: dto.commissionPercentage,
           isActive: dto.isActive ?? true,
         },
-        tx
+        tx,
       );
     });
 
@@ -173,7 +173,7 @@ export class BarbersService {
   async updateBarber(
     profileId: string,
     dto: UpdateBarberProfileDto,
-    actor: RequestActor
+    actor: RequestActor,
   ): Promise<SanitizedBarberProfile> {
     const profile = await this.userProfilesRepository.findBarberById(profileId);
 
@@ -182,7 +182,7 @@ export class BarbersService {
     }
 
     const actorBarbershop = await this.barbershopService.getBarbershopForActor(
-      actor as BarbershopRequestActor
+      actor as BarbershopRequestActor,
     );
 
     if (!actorBarbershop || actorBarbershop.id !== profile.barbershopId) {
@@ -193,7 +193,7 @@ export class BarbersService {
 
     if (!this.isAdmin(actor) && !isSelf) {
       throw new ForbiddenException(
-        "You do not have permission to update this profile"
+        "You do not have permission to update this profile",
       );
     }
 
@@ -206,13 +206,13 @@ export class BarbersService {
 
     if (dto.commissionPercentage !== undefined && !this.isAdmin(actor)) {
       throw new ForbiddenException(
-        "You do not have permission to update commission percentage"
+        "You do not have permission to update commission percentage",
       );
     }
 
     if (dto.isActive !== undefined && !this.isAdmin(actor)) {
       throw new ForbiddenException(
-        "You do not have permission to update active status"
+        "You do not have permission to update active status",
       );
     }
 
@@ -229,8 +229,11 @@ export class BarbersService {
     if (dto.password !== undefined) {
       userData.hashedPassword = await bcrypt.hash(
         dto.password,
-        BarbersService.PASSWORD_SALT_ROUNDS
+        BarbersService.PASSWORD_SALT_ROUNDS,
       );
+    }
+    if (dto.isActive !== undefined) {
+      userData.isActive = dto.isActive;
     }
 
     const profileData: Prisma.BarberProfileUpdateInput = {};
@@ -264,7 +267,7 @@ export class BarbersService {
         updatedProfile = await this.userProfilesRepository.updateBarberProfile(
           profileId,
           profileData,
-          tx
+          tx,
         );
       }
     });
@@ -288,7 +291,7 @@ export class BarbersService {
   private canAccessProfile(
     actor: RequestActor,
     actorBarbershopId: string,
-    profile: BarberProfileWithUser
+    profile: BarberProfileWithUser,
   ): boolean {
     if (this.isAdmin(actor)) {
       return profile.barbershopId === actorBarbershopId;
@@ -320,7 +323,7 @@ export class BarbersService {
         name: profile.user.name,
         phone: profile.user.phone,
         permissions: profile.user.permissions.map(
-          ({ permission }) => permission.name as Permission
+          ({ permission }) => permission.name as Permission,
         ),
       },
       barbershop: {

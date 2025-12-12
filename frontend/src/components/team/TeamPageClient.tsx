@@ -12,18 +12,27 @@ import { apiClient } from "@/src/services/apiClient";
 import { SanitizedBarberProfile } from "@/src/types/barbers";
 import { SanitizedReceptionistProfile } from "@/src/types/receptionists";
 import { NewTeamMemberModal } from "@/src/components/team/NewTeamMemberModal";
+import { EditTeamMemberModal } from "@/src/components/team/EditTeamMemberModal";
+import {
+  TEAM_ROLE_ENDPOINTS,
+  TEAM_ROLE_LABELS,
+  TeamMember,
+} from "@/src/components/team/team.types";
 
-interface TeamMember {
-  id: string;
-  name: string;
-  email: string;
-  phone?: string | null;
-  role: "BARBER" | "RECEPTIONIST";
-}
+const DEFAULT_TEAM_ACTION_ERROR = "Não foi possível atualizar o colaborador.";
 
-const ROLE_LABELS: Record<TeamMember["role"], string> = {
-  BARBER: "Barbeiro",
-  RECEPTIONIST: "Recepcionista",
+const extractActionErrorMessage = (err: unknown): string => {
+  if (axios.isAxiosError(err)) {
+    const payload = err.response?.data as { message?: string | string[] };
+    const message = payload?.message;
+    if (Array.isArray(message)) {
+      return message[0];
+    }
+    if (typeof message === "string") {
+      return message;
+    }
+  }
+  return DEFAULT_TEAM_ACTION_ERROR;
 };
 
 export function TeamPageClient() {
@@ -32,8 +41,11 @@ export function TeamPageClient() {
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
   const isAdmin = useMemo(
     () => Boolean(user?.permissions?.includes("ADMIN")),
@@ -64,6 +76,7 @@ export function TeamPageClient() {
           email: profile.user.email,
           phone: profile.user.phone,
           role: "BARBER" as const,
+          isActive: profile.isActive,
         })),
         ...receptionistsResponse.data.map((profile) => ({
           id: profile.id,
@@ -71,6 +84,7 @@ export function TeamPageClient() {
           email: profile.user.email,
           phone: profile.user.phone,
           role: "RECEPTIONIST" as const,
+          isActive: profile.isActive,
         })),
       ].sort((a, b) => a.name.localeCompare(b.name));
 
@@ -90,6 +104,62 @@ export function TeamPageClient() {
     }
   }, [isAdmin, loadTeam]);
 
+  const closeEditModal = () => {
+    setSelectedMember(null);
+    setIsEditModalOpen(false);
+  };
+
+  const handleCreateSuccess = () => {
+    setIsCreateModalOpen(false);
+    loadTeam();
+    setToastMessage("Colaborador criado com sucesso");
+  };
+
+  const handleEditClick = (member: TeamMember) => {
+    setSelectedMember(member);
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditSuccess = () => {
+    closeEditModal();
+    loadTeam();
+    setToastMessage("Colaborador atualizado com sucesso");
+  };
+
+  const handleArchiveToggle = useCallback(
+    async (member: TeamMember, nextIsActive: boolean) => {
+      if (!nextIsActive) {
+        const confirmed = window.confirm(
+          `Arquivar ${member.name}? O acesso ao sistema será bloqueado.`
+        );
+        if (!confirmed) {
+          return;
+        }
+      }
+
+      setActionLoadingId(member.id);
+      try {
+        await apiClient.patch(
+          `${TEAM_ROLE_ENDPOINTS[member.role]}/${member.id}`,
+          {
+            isActive: nextIsActive,
+          }
+        );
+        setToastMessage(
+          nextIsActive
+            ? "Colaborador reativado com sucesso"
+            : "Colaborador arquivado com sucesso"
+        );
+        loadTeam();
+      } catch (err) {
+        setToastMessage(extractActionErrorMessage(err));
+      } finally {
+        setActionLoadingId(null);
+      }
+    },
+    [loadTeam]
+  );
+
   if (isBootstrapping || !user || !isAdmin) {
     return (
       <DashboardLayout>
@@ -99,12 +169,6 @@ export function TeamPageClient() {
       </DashboardLayout>
     );
   }
-
-  const handleModalSuccess = () => {
-    setIsModalOpen(false);
-    loadTeam();
-    setToastMessage("Colaborador criado com sucesso");
-  };
 
   return (
     <DashboardLayout>
@@ -122,7 +186,7 @@ export function TeamPageClient() {
               acessar o painel.
             </p>
           </div>
-          <Button type="button" onClick={() => setIsModalOpen(true)}>
+          <Button type="button" onClick={() => setIsCreateModalOpen(true)}>
             Novo colaborador
           </Button>
         </div>
@@ -146,7 +210,9 @@ export function TeamPageClient() {
               {members.map((member) => (
                 <div
                   key={`${member.role}-${member.id}`}
-                  className="rounded-2xl border border-slate-200 bg-white px-4 py-4"
+                  className={`rounded-2xl border border-slate-200 bg-white px-4 py-4 ${
+                    member.isActive ? "" : "opacity-70"
+                  }`}
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -156,7 +222,7 @@ export function TeamPageClient() {
                       <p className="text-sm text-slate-500">{member.email}</p>
                     </div>
                     <span className="rounded-full bg-brand-yellow/20 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-brand-blue">
-                      {ROLE_LABELS[member.role]}
+                      {TEAM_ROLE_LABELS[member.role]}
                     </span>
                   </div>
                   {member.phone && (
@@ -164,6 +230,39 @@ export function TeamPageClient() {
                       {member.phone}
                     </p>
                   )}
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-widest ${
+                        member.isActive
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-slate-200 text-slate-600"
+                      }`}
+                    >
+                      {member.isActive ? "Ativo" : "Arquivado"}
+                    </span>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="px-3 py-1 text-xs"
+                        onClick={() => handleEditClick(member)}
+                        disabled={actionLoadingId === member.id}
+                      >
+                        Editar
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={member.isActive ? "outline" : "secondary"}
+                        className="px-3 py-1 text-xs"
+                        onClick={() =>
+                          handleArchiveToggle(member, !member.isActive)
+                        }
+                        isLoading={actionLoadingId === member.id}
+                      >
+                        {member.isActive ? "Arquivar" : "Reativar"}
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -172,9 +271,16 @@ export function TeamPageClient() {
       </div>
 
       <NewTeamMemberModal
-        open={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSuccess={handleModalSuccess}
+        open={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSuccess={handleCreateSuccess}
+      />
+
+      <EditTeamMemberModal
+        open={isEditModalOpen}
+        member={selectedMember}
+        onClose={closeEditModal}
+        onSuccess={handleEditSuccess}
       />
 
       {toastMessage && (
